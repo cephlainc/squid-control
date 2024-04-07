@@ -1,9 +1,11 @@
 from enum import Enum
 
+
 class TriggerModeSetting(Enum):
-    SOFTWARE = 'Software Trigger'
-    HARDWARE = 'Hardware Trigger'
-    CONTINUOUS = 'Continuous Acqusition'
+    SOFTWARE = "Software Trigger"
+    HARDWARE = "Hardware Trigger"
+    CONTINUOUS = "Continuous Acqusition"
+
 
 def get_camera(camera_type):
     if camera_type == "Toupcam":
@@ -26,9 +28,12 @@ def get_camera(camera_type):
         try:
             import squid_control.control.camera.camera_flir as camera_fc
         except:
-            print("Problem importing FLIR camera for focus, defaulting to default camera")
+            print(
+                "Problem importing FLIR camera for focus, defaulting to default camera"
+            )
             import squid_control.control.camera as camera_fc
     else:
         import squid_control.control.camera.camera_default as camera
+
         camera_fc = camera
     return camera, camera_fc

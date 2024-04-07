@@ -1,5 +1,5 @@
 # set QT_API environment variable
-import os 
+import os
 
 import qtpy
 
@@ -14,35 +14,36 @@ import squid_control.control.camera.camera_default as camera
 import squid_control.control.core as core
 import squid_control.control.microcontroller as microcontroller
 
+
 class OctopiGUI(QMainWindow):
 
-	# variables
-	fps_software_trigger = 100
+    # variables
+    fps_software_trigger = 100
 
-	def __init__(self, *args, **kwargs):
-		super().__init__(*args, **kwargs)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
-		# load objects
-		self.microcontroller = microcontroller.Microcontroller()
-		self.navigationController = core.NavigationController(self.microcontroller)
+        # load objects
+        self.microcontroller = microcontroller.Microcontroller()
+        self.navigationController = core.NavigationController(self.microcontroller)
 
-		# load widgets
-		self.navigationWidget = widgets.NavigationWidget(self.navigationController)
-		
-		# layout widgets
-		layout = QGridLayout() #layout = QStackedLayout()
-		layout.addWidget(self.navigationWidget,2,0)
+        # load widgets
+        self.navigationWidget = widgets.NavigationWidget(self.navigationController)
 
-		# transfer the layout to the central widget
-		self.centralWidget = QWidget()
-		self.centralWidget.setLayout(layout)
-		self.setCentralWidget(self.centralWidget)
+        # layout widgets
+        layout = QGridLayout()  # layout = QStackedLayout()
+        layout.addWidget(self.navigationWidget, 2, 0)
 
-		# make connections
-		self.navigationController.xPos.connect(self.navigationWidget.label_Xpos.setNum)
-		self.navigationController.yPos.connect(self.navigationWidget.label_Ypos.setNum)
-		self.navigationController.zPos.connect(self.navigationWidget.label_Zpos.setNum)
+        # transfer the layout to the central widget
+        self.centralWidget = QWidget()
+        self.centralWidget.setLayout(layout)
+        self.setCentralWidget(self.centralWidget)
 
-	def closeEvent(self, event):
-		event.accept()
-		self.navigationController.home()
+        # make connections
+        self.navigationController.xPos.connect(self.navigationWidget.label_Xpos.setNum)
+        self.navigationController.yPos.connect(self.navigationWidget.label_Ypos.setNum)
+        self.navigationController.zPos.connect(self.navigationWidget.label_Zpos.setNum)
+
+    def closeEvent(self, event):
+        event.accept()
+        self.navigationController.home()

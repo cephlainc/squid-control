@@ -1,5 +1,5 @@
 # set QT_API environment variable
-import os 
+import os
 import argparse
 
 # qt libraries
@@ -9,20 +9,23 @@ from qtpy.QtGui import *
 
 # app specific libraries
 import squid_control.control.gui_2cameras_sync as gui
-#import squid_control.control.gui_2cameras_async as gui
-#import squid_control.control.gui_tiscamera as gui
+
+# import squid_control.control.gui_2cameras_async as gui
+# import squid_control.control.gui_tiscamera as gui
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--simulation", help="Run the GUI with simulated hardware.", action = 'store_true')
+parser.add_argument(
+    "--simulation", help="Run the GUI with simulated hardware.", action="store_true"
+)
 args = parser.parse_args()
 
 if __name__ == "__main__":
 
     app = QApplication([])
-    app.setStyle('Fusion')
-    if(args.simulation):
-        win = gui.OctopiGUI(is_simulation = True)
+    app.setStyle("Fusion")
+    if args.simulation:
+        win = gui.OctopiGUI(is_simulation=True)
     else:
         win = gui.OctopiGUI()
     win.show()
-    app.exec_() #sys.exit(app.exec_())
+    app.exec_()  # sys.exit(app.exec_())

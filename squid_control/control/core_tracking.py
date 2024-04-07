@@ -1,11 +1,9 @@
-
 from qtpy.QtCore import QObject
 import squid_control.control.tracking as tracking
 
 
-
 class TrackingController(QObject):
-    def __init__(self,microcontroller,navigationController):
+    def __init__(self, microcontroller, navigationController):
         QObject.__init__(self)
         self.microcontroller = microcontroller
         self.navigationController = navigationController
@@ -16,18 +14,18 @@ class TrackingController(QObject):
         self.pid_controller_z = tracking.PID_Controller()
         self.tracking_frame_counter = 0
 
-    def on_new_frame(self,image,frame_ID,timestamp):
+    def on_new_frame(self, image, frame_ID, timestamp):
         # initialize the tracker when a new track is started
         if self.tracking_frame_counter == 0:
             # initialize the tracker
             # initialize the PID controller
             pass
 
-        # crop the image, resize the image 
+        # crop the image, resize the image
         # [to fill]
 
         # get the location
-        [x,y] = self.tracker_xy.track(image)
+        [x, y] = self.tracker_xy.track(image)
         z = self.track_z.track(image)
         # note that z tracking may use a different image from a different camera, we can implement two different on_new_frame callback function, one for xy tracking and one for z tracking
         # another posibility is to read the current frame(s) from the z tracking camera (instead of using callback) when a new frame for XY tracking arrives
@@ -46,7 +44,7 @@ class TrackingController(QObject):
         # [to fill]
 
         # generate motion commands
-        motion_commands = self.generate_motion_commands(self,dx,dy,dz)
+        motion_commands = self.generate_motion_commands(self, dx, dy, dz)
 
         # send motion commands
         self.microcontroller.send_command(motion_commands)

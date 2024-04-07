@@ -1,6 +1,7 @@
 # set QT_API environment variable
-import os 
+import os
 import argparse
+
 os.environ["QT_API"] = "pyqt5"
 import qtpy
 
@@ -13,15 +14,17 @@ from qtpy.QtGui import *
 import squid_control.control.gui_platereader as gui
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--simulation", help="Run the GUI with simulated hardware.", action = 'store_true')
+parser.add_argument(
+    "--simulation", help="Run the GUI with simulated hardware.", action="store_true"
+)
 args = parser.parse_args()
 
 if __name__ == "__main__":
 
     app = QApplication([])
-    if(args.simulation):
-    	win = gui.OctopiGUI(is_simulation = True)
+    if args.simulation:
+        win = gui.OctopiGUI(is_simulation=True)
     else:
-    	win = gui.OctopiGUI()
+        win = gui.OctopiGUI()
     win.show()
-    app.exec_() #sys.exit(app.exec_())
+    app.exec_()  # sys.exit(app.exec_())

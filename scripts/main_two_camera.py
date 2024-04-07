@@ -1,5 +1,6 @@
 # set QT_API environment variable
-import os 
+import os
+
 os.environ["QT_API"] = "pyqt5"
 import qtpy
 
@@ -9,13 +10,14 @@ from qtpy.QtWidgets import *
 from qtpy.QtGui import *
 
 # app specific libraries
-#import squid_control.control.gui_simulation as gui
+# import squid_control.control.gui_simulation as gui
 import squid_control.control.gui_2cameras_async as gui
-#import squid_control.control.gui_tiscamera as gui
+
+# import squid_control.control.gui_tiscamera as gui
 
 if __name__ == "__main__":
 
     app = QApplication([])
     win = gui.OctopiGUI()
     win.show()
-    app.exec_() #sys.exit(app.exec_())
+    app.exec_()  # sys.exit(app.exec_())
