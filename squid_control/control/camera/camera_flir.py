@@ -2,7 +2,12 @@ import argparse
 import cv2
 import time
 import numpy as np
-import PySpin
+try:
+    import PySpin
+except ImportError:
+    print("Warning: PySpin not found, camera control will not work")
+    raise
+
 from squid_control.control.config import CONFIG
 from squid_control.control.camera import TriggerModeSetting
 
