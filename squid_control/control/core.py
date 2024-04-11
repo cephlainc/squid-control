@@ -772,9 +772,9 @@ class NavigationController(QObject):
             self.move_y(delta_y)
 
     def move_to_cached_position(self):
-        if not os.path.isfile("cache/last_coords.txt"):
+        if not os.path.isfile(CONFIG.LAST_COORDS_PATH):
             return
-        with open("cache/last_coords.txt", "r") as f:
+        with open(CONFIG.LAST_COORDS_PATH, "r") as f:
             for line in f:
                 try:
                     x, y, z = line.strip("\n").strip().split(",")
@@ -789,7 +789,7 @@ class NavigationController(QObject):
                 break
 
     def cache_current_position(self):
-        with open("cache/last_coords.txt", "w") as f:
+        with open(CONFIG.LAST_COORDS_PATH, "w") as f:
             f.write(
                 ",".join([str(self.x_pos_mm), str(self.y_pos_mm), str(self.z_pos_mm)])
             )
@@ -4210,7 +4210,7 @@ class ImageArrayDisplayWindow(QMainWindow):
 
 
 class ConfigurationManager(QObject):
-    def __init__(self, filename="channel_configurations.xml"):
+    def __init__(self, filename=CONFIG.CHANNEL_CONFIGURATIONS_PATH):
         QObject.__init__(self)
         self.config_filename = filename
         self.configurations = []

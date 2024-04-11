@@ -499,13 +499,16 @@ class BaseConfig(BaseModel):
     A1_Y_MM: float = 11.36
 
     SHOW_DAC_CONTROL: bool = False
+    CACHE_CONFIG_FILE_PATH: str = None
+    CHANNEL_CONFIGURATIONS_PATH: str = None
+    LAST_COORDS_PATH: str = None
 
 
 def get_cached_config_file_path(config_path):
     cached_config_file_path = None
 
     try:
-        with open("cache_config_file_path.txt", "r") as file:
+        with open(CONFIG.CACHE_CONFIG_FILE_PATH, "r") as file:
             for line in file:
                 cached_config_file_path = line
                 break
@@ -552,7 +555,7 @@ def get_cached_config_file_path(config_path):
                 continue
             myclass = locals()[classkey]
             populate_class_from_dict(myclass, pop_items)
-        with open("cache_config_file_path.txt", "w") as file:
+        with open(CONFIG.CACHE_CONFIG_FILE_PATH, "w") as file:
             file.write(config_files[0])
         cached_config_file_path = config_files[0]
     else:
@@ -577,6 +580,15 @@ CONFIG = BaseConfig()
 
 def load_config(config_path):
     global CONFIG
+    home_dir = Path.home()
+    config_dir = home_dir / '.squid-control'
+
+    # Ensure the .squid-control directory exists
+    config_dir.mkdir(exist_ok=True)
+
+    CONFIG.CACHE_CONFIG_FILE_PATH = config_dir / 'cache_config_file_path.txt'
+    CONFIG.CHANNEL_CONFIGURATIONS_PATH = config_dir / 'channel_configurations.xml'
+    CONFIG.LAST_COORDS_PATH = config_dir / 'last_coords.txt'
 
     cf_editor_parser = ConfigParser()
     cached_config_file_path = get_cached_config_file_path(config_path)
@@ -629,3 +641,9 @@ def load_config(config_path):
         cf_editor_parser.read(cached_config_file_path)
     else:
         return False
+
+
+
+
+
+    
