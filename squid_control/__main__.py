@@ -50,8 +50,9 @@ def main():
     )
     parser.add_argument("--config", help="Load a configuration file.", type=str)
     args = parser.parse_args()
+    assert args.config is not None, "Please provide a configuration file."
 
-    if not load_config(args.config):
+    if load_config(args.config):
         legacy_config = True
     else:
         legacy_config = False

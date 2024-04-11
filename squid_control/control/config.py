@@ -500,8 +500,8 @@ class BaseConfig(BaseModel):
 
     SHOW_DAC_CONTROL: bool = False
     CACHE_CONFIG_FILE_PATH: str = None
-    CHANNEL_CONFIGURATIONS_PATH: str = None
-    LAST_COORDS_PATH: str = None
+    CHANNEL_CONFIGURATIONS_PATH: str = ""
+    LAST_COORDS_PATH: str = ""
 
 
 def get_cached_config_file_path(config_path):
@@ -586,9 +586,17 @@ def load_config(config_path):
     # Ensure the .squid-control directory exists
     config_dir.mkdir(exist_ok=True)
 
+    current_dir = Path(__file__).parent
+    if not str(config_path).endswith(".ini"):
+        config_path = current_dir / ("../configurations/configurations_" + str(config_path) + ".ini")
+
+
     CONFIG.CACHE_CONFIG_FILE_PATH = config_dir / 'cache_config_file_path.txt'
-    CONFIG.CHANNEL_CONFIGURATIONS_PATH = config_dir / 'channel_configurations.xml'
-    CONFIG.LAST_COORDS_PATH = config_dir / 'last_coords.txt'
+    CONFIG.CHANNEL_CONFIGURATIONS_PATH = str(config_dir / 'channel_configurations.xml')
+    CONFIG.LAST_COORDS_PATH = str(config_dir / 'last_coords.txt')
+
+    if not config_path or not os.path.exists(config_path):
+        return False
 
     cf_editor_parser = ConfigParser()
     cached_config_file_path = get_cached_config_file_path(config_path)
