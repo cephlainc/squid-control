@@ -6,7 +6,9 @@ from qtpy.QtWidgets import (
     QDesktopWidget,
     QFrame,
     QVBoxLayout,
+    QApplication,
 )
+import os
 
 from squid_control.control.processing_handler import ProcessingHandler
 
@@ -16,12 +18,6 @@ from squid_control.control.camera import TriggerModeSetting
 
 import squid_control.control.tracking as tracking
 
-try:
-    from squid_control.control.multipoint_custom_script_entry import *
-
-    print("custom multipoint script found")
-except:
-    print("no custom multipoint script found")
 
 from queue import Queue
 from threading import Thread, Lock
@@ -43,6 +39,37 @@ import pandas as pd
 
 import imageio as iio
 
+import importlib.util
+import os
+from importlib import import_module
+
+
+def _load_multipoint_function(module_path, entrypoint):
+    if module_path.endswith(".py"):
+        spec = importlib.util.spec_from_file_location("user_module", module_path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+    else:
+        module = import_module(module_path)
+
+    return getattr(module, entrypoint)
+
+def load_multipoint_custom_script(startup_function_uri: str):
+    parts = startup_function_uri.split(":")
+    module_path = parts[0]
+    assert not module_path.endswith(".py") or os.path.exists(
+        module_path
+    ), f"Module {module_path} does not exist"
+    entrypoint = parts[1] if len(parts) > 1 else None
+    assert (
+        entrypoint
+    ), f"Entrypoint is required for {startup_function_uri}, please use {startup_function_uri}:entrypoint_function"
+
+    # load the python module and get the entrypoint
+    load_func = _load_multipoint_function(module_path, entrypoint)
+
+    print(f"Successfully executed the startup function: {startup_function_uri}")
+    return load_func
 
 class ObjectiveStore:
     def __init__(
@@ -2157,8 +2184,9 @@ class MultiPointWorker(QObject):
 
                     if (
                         CONFIG.RUN_CUSTOM_MULTIPOINT
-                        and "multipoint_custom_script_entry" in globals()
                     ):
+                        assert CONFIG.CUSTOM_MULTIPOINT_FUNCTION is not None
+                        multipoint_custom_script_entry = load_multipoint_custom_script(CONFIG.CUSTOM_MULTIPOINT_FUNCTION)
 
                         print("run custom multipoint")
                         multipoint_custom_script_entry(

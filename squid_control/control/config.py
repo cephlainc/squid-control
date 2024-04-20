@@ -467,6 +467,7 @@ class BaseConfig(BaseModel):
     SHOW_LEGACY_DISPLACEMENT_MEASUREMENT_WINDOWS: bool = False
     MULTIPOINT_REFLECTION_AUTOFOCUS_ENABLE_BY_DEFAULT: bool = False
     RUN_CUSTOM_MULTIPOINT: bool = False
+    CUSTOM_MULTIPOINT_FUNCTION: str = None
     RETRACT_OBJECTIVE_BEFORE_MOVING_TO_LOADING_POSITION: bool = True
     OBJECTIVE_RETRACTED_POS_MM: float = 0.1
     CLASSIFICATION_MODEL_PATH: str = "/home/cephla/Documents/tmp/model_perf_r34_b32.pt"
@@ -504,81 +505,81 @@ class BaseConfig(BaseModel):
     LAST_COORDS_PATH: str = ""
 
 
-def get_cached_config_file_path(config_path):
-    cached_config_file_path = None
-
-    try:
-        with open(CONFIG.CACHE_CONFIG_FILE_PATH, "r") as file:
-            for line in file:
-                cached_config_file_path = line
-                break
-    except FileNotFoundError:
+    def read_config(self, config_path):
         cached_config_file_path = None
 
-    config_files = [config_path]
-    if config_files:
-        if len(config_files) > 1:
-            if cached_config_file_path in config_files:
-                print(
-                    "defaulting to last cached config file at "
-                    + cached_config_file_path
-                )
-                config_files = [cached_config_file_path]
-            else:
-                print(
-                    "multiple machine configuration files found, the program will exit"
-                )
-                exit()
-        print("load machine-specific configuration")
-        # exec(open(config_files[0]).read())
-        cfp = ConfigParser()
-        cfp.read(config_files[0])
-        var_items = list(locals().keys())
-        for var_name in var_items:
-            if type(locals()[var_name]) is type:
-                continue
-            varnamelower = var_name.lower()
-            if varnamelower not in cfp.options("GENERAL"):
-                continue
-            value = cfp.get("GENERAL", varnamelower)
-            actualvalue = conf_attribute_reader(value)
-            locals()[var_name] = actualvalue
-        for classkey in var_items:
-            myclass = None
-            classkeyupper = classkey.upper()
-            pop_items = None
-            try:
-                pop_items = cfp.items(classkeyupper)
-            except:
-                continue
-            if type(locals()[classkey]) is not type:
-                continue
-            myclass = locals()[classkey]
-            populate_class_from_dict(myclass, pop_items)
-        with open(CONFIG.CACHE_CONFIG_FILE_PATH, "w") as file:
-            file.write(config_files[0])
-        cached_config_file_path = config_files[0]
-    else:
-        print("configuration*.ini file not found, defaulting to legacy configuration")
-        config_files = glob.glob("." + "/" + "configuration*.txt")
+        try:
+            with open(CONFIG.CACHE_CONFIG_FILE_PATH, "r") as file:
+                for line in file:
+                    cached_config_file_path = line
+                    break
+        except FileNotFoundError:
+            cached_config_file_path = None
+
+        config_files = [config_path]
         if config_files:
             if len(config_files) > 1:
-                print(
-                    "multiple machine configuration files found, the program will exit"
-                )
-                exit()
+                if cached_config_file_path in config_files:
+                    print(
+                        "defaulting to last cached config file at "
+                        + cached_config_file_path
+                    )
+                    config_files = [cached_config_file_path]
+                else:
+                    print(
+                        "multiple machine configuration files found, the program will exit"
+                    )
+                    exit()
             print("load machine-specific configuration")
-            exec(open(config_files[0]).read())
+            # exec(open(config_files[0]).read())
+            cfp = ConfigParser()
+            cfp.read(config_files[0])
+            var_items = list(self.model_fields.keys())
+            for var_name in var_items:
+                if type(getattr(self, var_name)) is type:
+                    continue
+                varnamelower = var_name.lower()
+                if varnamelower not in cfp.options("GENERAL"):
+                    continue
+                value = cfp.get("GENERAL", varnamelower)
+                actualvalue = conf_attribute_reader(value)
+                setattr(self, var_name, actualvalue)
+            for classkey in var_items:
+                myclass = None
+                classkeyupper = classkey.upper()
+                pop_items = None
+                try:
+                    pop_items = cfp.items(classkeyupper)
+                except:
+                    continue
+                if type(getattr(self, classkey)) is not type:
+                    continue
+                myclass = getattr(self, classkey)
+                populate_class_from_dict(myclass, pop_items)
+            with open(CONFIG.CACHE_CONFIG_FILE_PATH, "w") as file:
+                file.write(str(config_files[0]))
+            cached_config_file_path = config_files[0]
         else:
-            print("machine-specific configuration not present, the program will exit")
-            exit()
-    return cached_config_file_path
+            print("configuration*.ini file not found, defaulting to legacy configuration")
+            config_files = glob.glob("." + "/" + "configuration*.txt")
+            if config_files:
+                if len(config_files) > 1:
+                    print(
+                        "multiple machine configuration files found, the program will exit"
+                    )
+                    exit()
+                print("load machine-specific configuration")
+                exec(open(config_files[0]).read())
+            else:
+                print("machine-specific configuration not present, the program will exit")
+                exit()
+        return cached_config_file_path
 
 
 CONFIG = BaseConfig()
 
 
-def load_config(config_path):
+def load_config(config_path, multipoint_function):
     global CONFIG
     home_dir = Path.home()
     config_dir = home_dir / '.squid-control'
@@ -588,22 +589,26 @@ def load_config(config_path):
 
     current_dir = Path(__file__).parent
     if not str(config_path).endswith(".ini"):
-        config_path = current_dir / ("../configurations/configurations_" + str(config_path) + ".ini")
+        config_path = current_dir / ("../configurations/configuration_" + str(config_path) + ".ini")
 
 
-    CONFIG.CACHE_CONFIG_FILE_PATH = config_dir / 'cache_config_file_path.txt'
+    CONFIG.CACHE_CONFIG_FILE_PATH = str(config_dir / 'cache_config_file_path.txt')
     CONFIG.CHANNEL_CONFIGURATIONS_PATH = str(config_dir / 'channel_configurations.xml')
     CONFIG.LAST_COORDS_PATH = str(config_dir / 'last_coords.txt')
 
-    if not config_path or not os.path.exists(config_path):
-        return False
+    if config_path and not os.path.exists(config_path):
+        raise FileNotFoundError(f"Configuration file {config_path} not found.")
 
     cf_editor_parser = ConfigParser()
-    cached_config_file_path = get_cached_config_file_path(config_path)
+    # Read the config
+    cached_config_file_path = CONFIG.read_config(config_path)
     CONFIG.STAGE_POS_SIGN_X = CONFIG.STAGE_MOVEMENT_SIGN_X
     CONFIG.STAGE_POS_SIGN_Y = CONFIG.STAGE_MOVEMENT_SIGN_Y
     CONFIG.STAGE_POS_SIGN_Z = CONFIG.STAGE_MOVEMENT_SIGN_Z
     CONFIG.STAGE_POS_SIGN_THETA = CONFIG.STAGE_MOVEMENT_SIGN_THETA
+    if multipoint_function:
+        CONFIG.RUN_CUSTOM_MULTIPOINT = True
+        CONFIG.CUSTOM_MULTIPOINT_FUNCTION = multipoint_function
 
     # saving path
     if not (CONFIG.DEFAULT_SAVING_PATH.startswith(str(Path.home()))):

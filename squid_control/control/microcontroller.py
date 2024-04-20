@@ -21,7 +21,7 @@ from enum import Enum
 
 
 # to do (7/28/2021) - add functions for configuring the stepper motors
-class LIMIT_CODE(Enum):
+class LIMIT_CODE:
     X_POSITIVE = 0
     X_NEGATIVE = 1
     Y_POSITIVE = 2
@@ -759,6 +759,7 @@ class Microcontroller:
             """
             self._cmd_id_mcu = msg[0]
             self._cmd_execution_status = msg[1]
+
             if (self._cmd_id_mcu == self._cmd_id) and (
                 self._cmd_execution_status
                 == CONFIG.CMD_EXECUTION_STATUS.COMPLETED_WITHOUT_ERRORS

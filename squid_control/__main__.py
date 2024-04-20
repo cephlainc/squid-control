@@ -25,6 +25,7 @@ from squid_control.control.config import load_config
 
 import glob
 import argparse
+from configparser import ConfigParser
 
 import logging
 
@@ -49,13 +50,12 @@ def main():
         "--simulation", help="Run the GUI with simulated hardware.", action="store_true"
     )
     parser.add_argument("--config", help="Load a configuration file.", type=str)
+    parser.add_argument("--multipoint-function", help="Load a multipoint function. format: ./custom_script.py:function_name", type=str)
     args = parser.parse_args()
     assert args.config is not None, "Please provide a configuration file."
 
-    if load_config(args.config):
-        legacy_config = True
-    else:
-        legacy_config = False
+    load_config(args.config, args.multipoint_function)
+
 
     # export QT_QPA_PLATFORM_PLUGIN_PATH=/home/weiouyang/miniconda3/envs/squid-control/lib/python3.10/site-packages/PyQt5/Qt/plugins
     # use sys.executable to get the path to the python interpreter, python version, and lib path
@@ -83,16 +83,14 @@ def main():
     file_menu = QMenu("File", win)
     file_menu.addAction(acq_config_action)
 
-    if not legacy_config:
-        from configparser import ConfigParser
 
-        config_action = QAction("Microscope Settings", win)
-        cf_editor_parser = ConfigParser()
-        cf_editor_parser.read(args.config)
-        config_action.triggered.connect(
-            lambda: show_config(cf_editor_parser, args.config, win)
-        )
-        file_menu.addAction(config_action)
+    config_action = QAction("Microscope Settings", win)
+    cf_editor_parser = ConfigParser()
+    cf_editor_parser.read(args.config)
+    config_action.triggered.connect(
+        lambda: show_config(cf_editor_parser, args.config, win)
+    )
+    file_menu.addAction(config_action)
 
     try:
         csw = win.cswWindow

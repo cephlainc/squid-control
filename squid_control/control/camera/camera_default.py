@@ -303,18 +303,18 @@ class Camera(object):
         )
 
     def set_continuous_acquisition(self):
-        self.camera.TriggerModeSetting.set(gx.GxSwitchEntry.OFF)
+        self.camera.TriggerMode.set(gx.GxSwitchEntry.OFF)
         self.trigger_mode = TriggerModeSetting.CONTINUOUS
         self.update_camera_exposure_time()
 
     def set_software_triggered_acquisition(self):
-        self.camera.TriggerModeSetting.set(gx.GxSwitchEntry.ON)
+        self.camera.TriggerMode.set(gx.GxSwitchEntry.ON)
         self.camera.TriggerSource.set(gx.GxTriggerSourceEntry.SOFTWARE)
         self.trigger_mode = TriggerModeSetting.SOFTWARE
         self.update_camera_exposure_time()
 
     def set_hardware_triggered_acquisition(self):
-        self.camera.TriggerModeSetting.set(gx.GxSwitchEntry.ON)
+        self.camera.TriggerMode.set(gx.GxSwitchEntry.ON)
         self.camera.TriggerSource.set(
             gx.GxTriggerSourceEntry.LINE2
         )  # LINE0 requires 7 mA min
