@@ -46,3 +46,9 @@ Date:   Thu Apr 4 18:07:51 2024 -0700
     add laser af characterization mode for saving images from laser af camera
 ```
 
+How to make pypi work:
+ - Register on pypi.org
+ - Create a new token in the account settings
+ - In the repository setting, create a new secret called `PYPI_API_TOKEN` and paste the token in the value field
+ - Then, if you want to manually publish a new pypi package, go to actions, select the `Publish to PyPi` workflow, and click on `Run workflow`.
+
