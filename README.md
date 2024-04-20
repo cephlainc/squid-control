@@ -34,3 +34,15 @@ python -m squid_control --config HCS_v2 --simulation --multipoint-function=./my_
 
 
 
+
+## Note
+
+The current branch is a frok from https://github.com/hongquanli/octopi-research/ at the following commit:
+```
+commit dbb49fc314d82d8099d5e509c0e1ad9a919245c9 (HEAD -> master, origin/master, origin/HEAD)
+Author: Hongquan Li <hqlisu@gmail.com>
+Date:   Thu Apr 4 18:07:51 2024 -0700
+
+    add laser af characterization mode for saving images from laser af camera
+```
+
