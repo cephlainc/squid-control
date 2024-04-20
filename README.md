@@ -23,6 +23,11 @@ To start simulation mode, use the following command:
 python -m squid_control --config HCS_v2 --simulation
 ```
 
+To load a custom multipoint function:
+```
+python -m squid_control --config HCS_v2 --simulation --multipoint-function=./my_multipoint_custom_script_entry.py:multipoint_custom_script_entry
+```
+
 ## About
 
 <img style="width:60px;" src="./docs/assets/cephla_logo.svg"> Cephla Inc. 
