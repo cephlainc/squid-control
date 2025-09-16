@@ -1,15 +1,14 @@
-from configparser import ConfigParser
-import os
 import glob
-import numpy as np
+import json
+import os
+from configparser import ConfigParser
+from enum import Enum
 from pathlib import Path
+from typing import List, Literal, Optional
+
 from pydantic import BaseModel
 
-from enum import Enum
-from typing import Optional, Literal, List
 from squid_control.control.camera import TriggerModeSetting
-
-import json
 
 
 def conf_attribute_reader(string_value):
@@ -92,25 +91,6 @@ class Microcontroller2Def(Enum):
     N_BYTES_POS = 4
 
 
-class MCU_PINS(Enum):
-    PWM1 = 5
-    PWM2 = 4
-    PWM3 = 22
-    PWM4 = 3
-    PWM5 = 23
-    PWM6 = 2
-    PWM7 = 1
-    PWM9 = 6
-    PWM10 = 7
-    PWM11 = 8
-    PWM12 = 9
-    PWM13 = 10
-    PWM14 = 15
-    PWM15 = 24
-    PWM16 = 25
-    AF_LASER = 15
-
-
 # class LIMIT_SWITCH_POLARITY(BaseModel):
 #     ACTIVE_LOW: int = 0
 #     ACTIVE_HIGH: int = 1
@@ -134,6 +114,178 @@ class ILLUMINATION_CODE(Enum):
     ILLUMINATION_SOURCE_638NM = 13
     ILLUMINATION_SOURCE_561NM = 14
     ILLUMINATION_SOURCE_730NM = 15
+
+
+class ChannelInfo:
+    """Channel information container with all naming variants."""
+    def __init__(self, channel_id: int, human_name: str, zarr_name: str,
+                 example_image: str, param_name: str, description: str = ""):
+        self.channel_id = channel_id
+        self.human_name = human_name  # Human-readable name used in UI
+        self.zarr_name = zarr_name    # Name used in Zarr storage
+        self.example_image = example_image  # Example image filename
+        self.param_name = param_name  # Parameter name for settings
+        self.description = description
+
+class ChannelMapper:
+    """Centralized channel mapping system for the microscope control system."""
+
+    # Define all channels with consistent naming
+    CHANNELS = {
+        0: ChannelInfo(
+            channel_id=0,
+            human_name="BF LED matrix full",
+            zarr_name="BF_LED_matrix_full",
+            example_image="BF_LED_matrix_full.bmp",
+            param_name="BF_intensity_exposure",
+            description="Bright field LED matrix full illumination"
+        ),
+        11: ChannelInfo(
+            channel_id=11,
+            human_name="Fluorescence 405 nm Ex",
+            zarr_name="Fluorescence_405_nm_Ex",
+            example_image="Fluorescence_405_nm_Ex.bmp",
+            param_name="F405_intensity_exposure",
+            description="405nm fluorescence excitation"
+        ),
+        12: ChannelInfo(
+            channel_id=12,
+            human_name="Fluorescence 488 nm Ex",
+            zarr_name="Fluorescence_488_nm_Ex",
+            example_image="Fluorescence_488_nm_Ex.bmp",
+            param_name="F488_intensity_exposure",
+            description="488nm fluorescence excitation"
+        ),
+        13: ChannelInfo(
+            channel_id=13,
+            human_name="Fluorescence 638 nm Ex",
+            zarr_name="Fluorescence_638_nm_Ex",
+            example_image="Fluorescence_638_nm_Ex.bmp",
+            param_name="F638_intensity_exposure",
+            description="638nm fluorescence excitation"
+        ),
+        14: ChannelInfo(
+            channel_id=14,
+            human_name="Fluorescence 561 nm Ex",
+            zarr_name="Fluorescence_561_nm_Ex",
+            example_image="Fluorescence_561_nm_Ex.bmp",
+            param_name="F561_intensity_exposure",
+            description="561nm fluorescence excitation"
+        ),
+        15: ChannelInfo(
+            channel_id=15,
+            human_name="Fluorescence 730 nm Ex",
+            zarr_name="Fluorescence_730_nm_Ex",
+            example_image="Fluorescence_730_nm_Ex.bmp",
+            param_name="F730_intensity_exposure",
+            description="730nm fluorescence excitation"
+        ),
+    }
+
+    @classmethod
+    def get_channel_info(cls, channel_id: int) -> ChannelInfo:
+        """Get channel info by ID."""
+        if channel_id not in cls.CHANNELS:
+            raise ValueError(f"Unknown channel ID: {channel_id}")
+        return cls.CHANNELS[channel_id]
+
+    @classmethod
+    def get_channel_by_human_name(cls, human_name: str) -> ChannelInfo:
+        """Get channel info by human-readable name."""
+        for channel in cls.CHANNELS.values():
+            if channel.human_name == human_name:
+                return channel
+        raise ValueError(f"Unknown channel name: {human_name}")
+
+    @classmethod
+    def get_channel_by_zarr_name(cls, zarr_name: str) -> ChannelInfo:
+        """Get channel info by Zarr storage name."""
+        for channel in cls.CHANNELS.values():
+            if channel.zarr_name == zarr_name:
+                return channel
+        raise ValueError(f"Unknown Zarr channel name: {zarr_name}")
+
+    @classmethod
+    def get_all_channel_ids(cls) -> List[int]:
+        """Get all available channel IDs."""
+        return list(cls.CHANNELS.keys())
+
+    @classmethod
+    def get_all_human_names(cls) -> List[str]:
+        """Get all human-readable channel names."""
+        return [channel.human_name for channel in cls.CHANNELS.values()]
+
+    @classmethod
+    def get_all_zarr_names(cls) -> List[str]:
+        """Get all Zarr storage channel names."""
+        return [channel.zarr_name for channel in cls.CHANNELS.values()]
+
+    @classmethod
+    def human_name_to_id(cls, human_name: str) -> int:
+        """Convert human name to channel ID."""
+        return cls.get_channel_by_human_name(human_name).channel_id
+
+    @classmethod
+    def id_to_human_name(cls, channel_id: int) -> str:
+        """Convert channel ID to human name."""
+        return cls.get_channel_info(channel_id).human_name
+
+    @classmethod
+    def id_to_zarr_name(cls, channel_id: int) -> str:
+        """Convert channel ID to Zarr name."""
+        return cls.get_channel_info(channel_id).zarr_name
+
+    @classmethod
+    def zarr_name_to_id(cls, zarr_name: str) -> int:
+        """Convert Zarr name to channel ID."""
+        return cls.get_channel_by_zarr_name(zarr_name).channel_id
+
+    @classmethod
+    def id_to_param_name(cls, channel_id: int) -> str:
+        """Convert channel ID to parameter name."""
+        return cls.get_channel_info(channel_id).param_name
+
+    @classmethod
+    def id_to_example_image(cls, channel_id: int) -> str:
+        """Convert channel ID to example image filename."""
+        return cls.get_channel_info(channel_id).example_image
+
+    @classmethod
+    def get_human_to_id_map(cls) -> dict:
+        """Get mapping from human names to channel IDs."""
+        return {channel.human_name: channel.channel_id for channel in cls.CHANNELS.values()}
+
+    @classmethod
+    def get_id_to_zarr_map(cls) -> dict:
+        """Get mapping from channel IDs to Zarr names."""
+        return {channel.channel_id: channel.zarr_name for channel in cls.CHANNELS.values()}
+
+    @classmethod
+    def get_id_to_param_map(cls) -> dict:
+        """Get mapping from channel IDs to parameter names."""
+        return {channel.channel_id: channel.param_name for channel in cls.CHANNELS.values()}
+
+    @classmethod
+    def get_id_to_example_image_map(cls) -> dict:
+        """Get mapping from channel IDs to example image filenames."""
+        return {channel.channel_id: channel.example_image for channel in cls.CHANNELS.values()}
+
+    @classmethod
+    def get_fluorescence_channels(cls) -> List[ChannelInfo]:
+        """Get all fluorescence channels (ID >= 11)."""
+        return [channel for channel in cls.CHANNELS.values() if channel.channel_id >= 11]
+
+    @classmethod
+    def get_brightfield_channels(cls) -> List[ChannelInfo]:
+        """Get all bright field channels (ID < 11)."""
+        return [channel for channel in cls.CHANNELS.values() if channel.channel_id < 11]
+
+
+# For backward compatibility, create simple channel mapping constants that can be imported
+CHANNEL_HUMAN_TO_ID = ChannelMapper.get_human_to_id_map()
+CHANNEL_ID_TO_ZARR = ChannelMapper.get_id_to_zarr_map()
+CHANNEL_ID_TO_PARAM = ChannelMapper.get_id_to_param_map()
+CHANNEL_ID_TO_EXAMPLE_IMAGE = ChannelMapper.get_id_to_example_image_map()
 
 
 class VolumetricImagingSetting(BaseModel):
@@ -169,6 +321,8 @@ class AFSetting(BaseModel):
     STOP_THRESHOLD: float = 0.85
     CROP_WIDTH: int = 800
     CROP_HEIGHT: int = 800
+    MULTIPOINT_REFLECTION_AUTOFOCUS_ENABLE_BY_DEFAULT: bool = False
+    MULTIPOINT_AUTOFOCUS_ENABLE_BY_DEFAULT: bool = False
 
 
 class TrackingSetting(BaseModel):
@@ -180,7 +334,7 @@ class TrackingSetting(BaseModel):
     DEFAULT_INIT_METHOD: str = "roi"
 
 
-class SlidPoisitonSetting(BaseModel):
+class SlidePositionSetting(BaseModel):
     LOADING_X_MM: int = 30
     LOADING_Y_MM: int = 55
     SCANNING_X_MM: int = 3
@@ -200,11 +354,12 @@ class OutputGainSetting(BaseModel):
 
 
 class SoftwarePosLimitSetting(BaseModel):
-    X_POSITIVE: float = 56
-    X_NEGATIVE: float = -0.5
-    Y_POSITIVE: float = 56
-    Y_NEGATIVE: float = -0.5
+    X_POSITIVE: float = 112.5
+    X_NEGATIVE: float = 10
+    Y_POSITIVE: float = 76
+    Y_NEGATIVE: float = 6
     Z_POSITIVE: float = 6
+    Z_NEGATIVE: float = 0.05
 
 
 class FlipImageSetting(Enum):
@@ -214,6 +369,9 @@ class FlipImageSetting(Enum):
 
 
 class BaseConfig(BaseModel):
+    class Config:
+        extra = "allow"  # Allow extra fields that are not defined in the model
+
     MicrocontrollerDef: MicrocontrollerDefSetting = MicrocontrollerDefSetting()
     VOLUMETRIC_IMAGING: VolumetricImagingSetting = VolumetricImagingSetting()
     CMD_EXECUTION_STATUS: CmdExecutionStatus = CmdExecutionStatus()
@@ -221,7 +379,7 @@ class BaseConfig(BaseModel):
     PLATE_READER: PlateReaderSetting = PlateReaderSetting()
     AF: AFSetting = AFSetting()
     Tracking: TrackingSetting = TrackingSetting()
-    SLIDE_POSITION: SlidPoisitonSetting = SlidPoisitonSetting()
+    SLIDE_POSITION: SlidePositionSetting = SlidePositionSetting()
     OUTPUT_GAINS: OutputGainSetting = OutputGainSetting()
     SOFTWARE_POS_LIMIT: SoftwarePosLimitSetting = SoftwarePosLimitSetting()
     Acquisition: AcquisitionSetting = AcquisitionSetting()
@@ -234,7 +392,7 @@ class BaseConfig(BaseModel):
     #### machine specific configurations - to be overridden ###
     ###########################################################
     ROTATE_IMAGE_ANGLE: Optional[float] = None
-    FLIP_IMAGE: Optional[FlipImageSetting] = None  #
+    FLIP_IMAGE: Optional[FlipImageSetting] = None
 
     CAMERA_REVERSE_X: bool = False
     CAMERA_REVERSE_Y: bool = False
@@ -244,7 +402,7 @@ class BaseConfig(BaseModel):
     # note: XY are the in-plane axes, Z is the focus axis
 
     # change the following so that "backward" is "backward" - towards the single sided hall effect sensor
-    STAGE_MOVEMENT_SIGN_X: int = -1
+    STAGE_MOVEMENT_SIGN_X: int = 1
     STAGE_MOVEMENT_SIGN_Y: int = 1
     STAGE_MOVEMENT_SIGN_Z: int = -1
     STAGE_MOVEMENT_SIGN_THETA: int = 1
@@ -281,30 +439,30 @@ class BaseConfig(BaseModel):
 
     # beginning of actuator specific configurations
 
-    SCREW_PITCH_X_MM: float = 1
-    SCREW_PITCH_Y_MM: float = 1
-    SCREW_PITCH_Z_MM: float = 0.012 * 25.4
+    SCREW_PITCH_X_MM: float = 2.54
+    SCREW_PITCH_Y_MM: float = 2.54
+    SCREW_PITCH_Z_MM: float = 0.3
 
-    MICROSTEPPING_DEFAULT_X: float = 8
-    MICROSTEPPING_DEFAULT_Y: float = 8
-    MICROSTEPPING_DEFAULT_Z: float = 8
-    MICROSTEPPING_DEFAULT_THETA: float = 8  # not used, to be removed
+    MICROSTEPPING_DEFAULT_X: float = 256
+    MICROSTEPPING_DEFAULT_Y: float = 256
+    MICROSTEPPING_DEFAULT_Z: float = 256
+    MICROSTEPPING_DEFAULT_THETA: float = 256
 
-    X_MOTOR_RMS_CURRENT_mA: float = 490
-    Y_MOTOR_RMS_CURRENT_mA: float = 490
-    Z_MOTOR_RMS_CURRENT_mA: float = 490
+    X_MOTOR_RMS_CURRENT_MA: float = 1000
+    Y_MOTOR_RMS_CURRENT_MA: float = 1000
+    Z_MOTOR_RMS_CURRENT_MA: float = 500
 
-    X_MOTOR_I_HOLD: float = 0.5
-    Y_MOTOR_I_HOLD: float = 0.5
+    X_MOTOR_I_HOLD: float = 0.25
+    Y_MOTOR_I_HOLD: float = 0.25
     Z_MOTOR_I_HOLD: float = 0.5
 
-    MAX_VELOCITY_X_mm: float = 25
-    MAX_VELOCITY_Y_mm: float = 25
-    MAX_VELOCITY_Z_mm: float = 2
+    MAX_VELOCITY_X_MM: float = 30
+    MAX_VELOCITY_Y_MM: float = 30
+    MAX_VELOCITY_Z_MM: float = 2
 
-    MAX_ACCELERATION_X_mm: float = 500
-    MAX_ACCELERATION_Y_mm: float = 500
-    MAX_ACCELERATION_Z_mm: float = 20
+    MAX_ACCELERATION_X_MM: float = 500
+    MAX_ACCELERATION_Y_MM: float = 500
+    MAX_ACCELERATION_Z_MM: float = 100
 
     # config encoder arguments
     HAS_ENCODER_X: bool = False
@@ -341,9 +499,9 @@ class BaseConfig(BaseModel):
     LED_MATRIX_G_FACTOR: float = 0
     LED_MATRIX_B_FACTOR: float = 1
 
-    DEFAULT_SAVING_PATH: str = str(Path.home()) + "/Downloads"
+    DEFAULT_SAVING_PATH: str = ""
 
-    DEFAULT_PIXEL_FORMAT: str = "MONO12"
+    DEFAULT_PIXEL_FORMAT: str = "MONO8"
 
     DEFAULT_DISPLAY_CROP: int = (
         100  # value ranges from 1 to 100 - image display crop size
@@ -361,6 +519,8 @@ class BaseConfig(BaseModel):
         "IMX571": 3.76,
         "PYTHON300": 4.8,
     }
+    PIXEL_SIZE_ADJUSTMENT_FACTOR: float = 0.936
+    STITCHING_ROTATION_ANGLE_DEG: float = 0.0
     OBJECTIVES: dict = {
         "2x": {"magnification": 2, "NA": 0.10, "tube_lens_f_mm": 180},
         "4x": {"magnification": 4, "NA": 0.13, "tube_lens_f_mm": 180},
@@ -373,7 +533,7 @@ class BaseConfig(BaseModel):
     }
     TUBE_LENS_MM: float = 50
     CAMERA_SENSOR: str = "IMX226"
-    DEFAULT_OBJECTIVE: str = "10x (Mitutoyo)"
+    DEFAULT_OBJECTIVE: str = "20x"
     TRACKERS: List[str] = [
         "csrt",
         "kcf",
@@ -398,7 +558,6 @@ class BaseConfig(BaseModel):
 
     MULTIPOINT_AUTOFOCUS_CHANNEL: str = "BF LED matrix full"
     # MULTIPOINT_AUTOFOCUS_CHANNEL:str = 'BF LED matrix left half'
-    MULTIPOINT_AUTOFOCUS_ENABLE_BY_DEFAULT: bool = False
     MULTIPOINT_BF_SAVING_OPTION: str = "Raw"
     # MULTIPOINT_BF_SAVING_OPTION:str = 'RGB2GRAY'
     # MULTIPOINT_BF_SAVING_OPTION:str = 'Green Channel Only'
@@ -418,12 +577,12 @@ class BaseConfig(BaseModel):
     Z_STACKING_CONFIG: str = "FROM CENTER"  # 'FROM BOTTOM', 'FROM TOP'
 
     # plate format
-    WELLPLATE_FORMAT: int = 384
+    WELLPLATE_FORMAT: int = 96
 
     # for 384 well plate
     X_MM_384_WELLPLATE_UPPERLEFT: int = 0
     Y_MM_384_WELLPLATE_UPPERLEFT: int = 0
-    DEFAULT_Z_POS_MM: int = 2
+    DEFAULT_Z_POS_MM: int = 3.970
     X_ORIGIN_384_WELLPLATE_PIXEL: int = 177  # upper left of B2
     Y_ORIGIN_384_WELLPLATE_PIXEL: int = 141  # upper left of B2
     NUMBER_OF_SKIP_384: int = 1
@@ -435,8 +594,8 @@ class BaseConfig(BaseModel):
     # B1 upper left corner in mm: x = 12.13 mm - 3.3 mm/2, y = 8.99 mm + 4.5 mm - 3.3 mm/2
     # B2 upper left corner in pixel: x = 177, y = 141
 
-    WELLPLATE_OFFSET_X_mm: float = 0  # x offset adjustment for using different plates
-    WELLPLATE_OFFSET_Y_mm: float = 0  # y offset adjustment for using different plates
+    WELLPLATE_OFFSET_X_MM: float = 0  # x offset adjustment for using different plates
+    WELLPLATE_OFFSET_Y_MM: float =0 # y offset adjustment for using different plates
 
     # for USB spectrometer
     N_SPECTRUM_PER_POINT: int = 5
@@ -447,25 +606,42 @@ class BaseConfig(BaseModel):
     )
 
     # controller version
-    CONTROLLER_VERSION: str = "Arduino Due"  # 'Teensy'
+    CONTROLLER_VERSION: str = "Teensy"
 
     # How to read Spinnaker nodemaps, options are INDIVIDUAL or VALUE
     CHOSEN_READ: str = "INDIVIDUAL"
 
+    class MCU_PINS:
+        PWM1 = 5
+        PWM2 = 4
+        PWM3 = 22
+        PWM4 = 3
+        PWM5 = 23
+        PWM6 = 2
+        PWM7 = 1
+        PWM9 = 6
+        PWM10 = 7
+        PWM11 = 8
+        PWM12 = 9
+        PWM13 = 10
+        PWM14 = 15
+        PWM15 = 24
+        PWM16 = 25
+        AF_LASER = 15
+
     # laser autofocus
-    SUPPORT_LASER_AUTOFOCUS: bool = False
+    SUPPORT_LASER_AUTOFOCUS: bool = True
     MAIN_CAMERA_MODEL: str = "MER2-1220-32U3M"
     FOCUS_CAMERA_MODEL: str = "MER2-630-60U3M"
-    FOCUS_CAMERA_EXPOSURE_TIME_MS: int = 2
+    FOCUS_CAMERA_EXPOSURE_TIME_MS: int = 0.2
     FOCUS_CAMERA_ANALOG_GAIN: int = 0
     LASER_AF_AVERAGING_N: int = 5
-    LASER_AF_DISPLAY_SPOT_IMAGE: bool = True
+    LASER_AF_DISPLAY_SPOT_IMAGE: bool = False
     LASER_AF_CROP_WIDTH: int = 1536
     LASER_AF_CROP_HEIGHT: int = 256
     HAS_TWO_INTERFACES: bool = True
     USE_GLASS_TOP: bool = True
     SHOW_LEGACY_DISPLACEMENT_MEASUREMENT_WINDOWS: bool = False
-    MULTIPOINT_REFLECTION_AUTOFOCUS_ENABLE_BY_DEFAULT: bool = False
     RUN_CUSTOM_MULTIPOINT: bool = False
     CUSTOM_MULTIPOINT_FUNCTION: str = None
     RETRACT_OBJECTIVE_BEFORE_MOVING_TO_LOADING_POSITION: bool = True
@@ -501,17 +677,34 @@ class BaseConfig(BaseModel):
 
     SHOW_DAC_CONTROL: bool = False
     CACHE_CONFIG_FILE_PATH: str = None
-    CHANNEL_CONFIGURATIONS_PATH: str = ""
+    CHANNEL_CONFIGURATIONS_PATH: str = os.path.join(os.path.dirname(os.path.dirname(__file__)), "config", "u2os_fucci_illumination_configurations.xml")
     LAST_COORDS_PATH: str = ""
 
+    # for check if the stage is moved
+    STAGE_MOVED_THRESHOLD: float = 0.05
+
+    # Additional field to store options
+    OPTIONS: dict = {}
+
+
+    def write_config_to_txt(self, output_path):
+        with open(output_path, "w") as file:
+            for attribute, value in self.__dict__.items():
+                if isinstance(value, BaseModel):
+                    file.write(f"[{attribute}]\n")
+                    for sub_attribute, sub_value in value.dict().items():
+                        file.write(f"{sub_attribute.lower()} = {sub_value}\n")
+                else:
+                    file.write(f"{attribute.lower()} = {value}\n")
+                file.write("\n")
 
     def read_config(self, config_path):
         cached_config_file_path = None
 
         try:
-            with open(CONFIG.CACHE_CONFIG_FILE_PATH, "r") as file:
+            with open(self.CACHE_CONFIG_FILE_PATH) as file:
                 for line in file:
-                    cached_config_file_path = line
+                    cached_config_file_path = line.strip()
                     break
         except FileNotFoundError:
             cached_config_file_path = None
@@ -531,36 +724,36 @@ class BaseConfig(BaseModel):
                     )
                     exit()
             print("load machine-specific configuration")
-            # exec(open(config_files[0]).read())
             cfp = ConfigParser()
             cfp.read(config_files[0])
-            var_items = list(self.model_fields.keys())
-            for var_name in var_items:
-                if type(getattr(self, var_name)) is type:
-                    continue
-                varnamelower = var_name.lower()
-                if varnamelower not in cfp.options("GENERAL"):
-                    continue
-                value = cfp.get("GENERAL", varnamelower)
-                actualvalue = conf_attribute_reader(value)
-                setattr(self, var_name, actualvalue)
-            for classkey in var_items:
-                myclass = None
-                classkeyupper = classkey.upper()
-                pop_items = None
-                try:
-                    pop_items = cfp.items(classkeyupper)
-                except:
-                    continue
-                if type(getattr(self, classkey)) is not type:
-                    continue
-                myclass = getattr(self, classkey)
-                populate_class_from_dict(myclass, pop_items)
-            with open(CONFIG.CACHE_CONFIG_FILE_PATH, "w") as file:
-                file.write(str(config_files[0]))
-            cached_config_file_path = config_files[0]
+            for section in cfp.sections():
+                for key, value in cfp.items(section):
+                    actualvalue = conf_attribute_reader(value)
+                    if key.startswith("_") and key.endswith("_options"):
+                        self.OPTIONS[key] = actualvalue
+                    else:
+                        section_upper = section.upper()
+                        if hasattr(self, section_upper):
+                            class_instance = getattr(self, section_upper)
+                            if isinstance(class_instance, BaseModel):
+                                if key.upper() in class_instance.__fields__:
+                                    setattr(class_instance, key.upper(), actualvalue)
+                                else:
+                                    setattr(class_instance, key.upper(), actualvalue)
+                            else:
+                                setattr(self, section_upper, actualvalue)
+                        else:
+                            setattr(self, key.upper(), actualvalue)
+            try:
+                with open(self.CACHE_CONFIG_FILE_PATH, "w") as file:
+                    file.write(str(config_files[0]))
+                cached_config_file_path = config_files[0]
+            except Exception as e:
+                print(f"Error caching config file path: {e}")
         else:
-            print("configuration*.ini file not found, defaulting to legacy configuration")
+            print(
+                "configuration*.ini file not found, defaulting to legacy configuration"
+            )
             config_files = glob.glob("." + "/" + "configuration*.txt")
             if config_files:
                 if len(config_files) > 1:
@@ -571,7 +764,9 @@ class BaseConfig(BaseModel):
                 print("load machine-specific configuration")
                 exec(open(config_files[0]).read())
             else:
-                print("machine-specific configuration not present, the program will exit")
+                print(
+                    "machine-specific configuration not present, the program will exit"
+                )
                 exit()
         return cached_config_file_path
 
@@ -581,26 +776,30 @@ CONFIG = BaseConfig()
 
 def load_config(config_path, multipoint_function):
     global CONFIG
-    home_dir = Path.home()
-    config_dir = home_dir / '.squid-control'
 
-    # Ensure the .squid-control directory exists
-    config_dir.mkdir(exist_ok=True)
+    config_dir = Path(os.path.abspath(__file__)).parent.parent
 
     current_dir = Path(__file__).parent
     if not str(config_path).endswith(".ini"):
-        config_path = current_dir / ("../configurations/configuration_" + str(config_path) + ".ini")
+        config_path = current_dir / (
+            "../configurations/configuration_" + str(config_path) + ".ini"
+        )
 
+    # Convert Path object to string if needed
+    config_path = str(config_path)
 
-    CONFIG.CACHE_CONFIG_FILE_PATH = str(config_dir / 'cache_config_file_path.txt')
-    CONFIG.CHANNEL_CONFIGURATIONS_PATH = str(config_dir / 'channel_configurations.xml')
-    CONFIG.LAST_COORDS_PATH = str(config_dir / 'last_coords.txt')
+    CONFIG.CACHE_CONFIG_FILE_PATH = str(config_dir / "config" / "cache_config_file_path.txt")
 
-    if config_path and not os.path.exists(config_path):
+    CONFIG.CHANNEL_CONFIGURATIONS_PATH = str(config_dir / "config" / "u2os_fucci_illumination_configurations.xml")
+    CONFIG.LAST_COORDS_PATH = str(config_dir / "config" / "last_coords.txt")
+
+    # Check if configuration file exists
+    if not os.path.exists(config_path):
         raise FileNotFoundError(f"Configuration file {config_path} not found.")
 
+    print(f"Reading configuration from: {config_path}")
+
     cf_editor_parser = ConfigParser()
-    # Read the config
     cached_config_file_path = CONFIG.read_config(config_path)
     CONFIG.STAGE_POS_SIGN_X = CONFIG.STAGE_MOVEMENT_SIGN_X
     CONFIG.STAGE_POS_SIGN_Y = CONFIG.STAGE_MOVEMENT_SIGN_Y
@@ -610,11 +809,10 @@ def load_config(config_path, multipoint_function):
         CONFIG.RUN_CUSTOM_MULTIPOINT = True
         CONFIG.CUSTOM_MULTIPOINT_FUNCTION = multipoint_function
 
-    # saving path
-    if not (CONFIG.DEFAULT_SAVING_PATH.startswith(str(Path.home()))):
-        CONFIG.DEFAULT_SAVING_PATH = (
-            str(Path.home()) + "/" + CONFIG.DEFAULT_SAVING_PATH.strip("/")
-        )
+    # if not (CONFIG.DEFAULT_SAVING_PATH.startswith(str(Path.home()))):
+    #     CONFIG.DEFAULT_SAVING_PATH = (
+    #         str(Path.home()) + "/" + CONFIG.DEFAULT_SAVING_PATH.strip("/")
+    #     )
 
     if CONFIG.ENABLE_TRACKING:
         CONFIG.DEFAULT_DISPLAY_CROP = CONFIG.Tracking.DEFAULT_DISPLAY_CROP
@@ -650,13 +848,310 @@ def load_config(config_path, multipoint_function):
         CONFIG.A1_X_MM = 24.55
         CONFIG.A1_Y_MM = 23.01
 
-    if os.path.exists(cached_config_file_path):
-        cf_editor_parser.read(cached_config_file_path)
-    else:
+    # Apply additional configuration settings like wellplate_offset
+    if hasattr(CONFIG, 'WELLPLATE_OFFSET_X_MM'):
+        print(f"Applying wellplate offset X: {CONFIG.WELLPLATE_OFFSET_X_MM}")
+        if CONFIG.WELLPLATE_FORMAT in [384, 96, 24, 12, 6]:
+            CONFIG.A1_X_MM += CONFIG.WELLPLATE_OFFSET_X_MM
+
+    if hasattr(CONFIG, 'WELLPLATE_OFFSET_Y_MM'):
+        print(f"Applying wellplate offset Y: {CONFIG.WELLPLATE_OFFSET_Y_MM}")
+        if CONFIG.WELLPLATE_FORMAT in [384, 96, 24, 12, 6]:
+            CONFIG.A1_Y_MM += CONFIG.WELLPLATE_OFFSET_Y_MM
+
+    # Write configuration to txt file after reading
+    CONFIG.write_config_to_txt(str(config_dir / "config" / "config_parameters.txt"))
+    print("Configuration loaded and written to config/config_parameters.txt")
+
+    try:
+        if cached_config_file_path and os.path.exists(cached_config_file_path):
+            cf_editor_parser.read(cached_config_file_path)
+    except Exception as e:
+        print(f"Error reading cached config: {e}")
         return False
 
+    return True
 
 
+# For flexible plate format:
+class WELLPLATE_FORMAT_384:
+    WELL_SIZE_MM = 3.3
+    WELL_SPACING_MM = 4.5
+    NUMBER_OF_SKIP = 1
+    A1_X_MM = 12.05
+    A1_Y_MM = 9.05
 
 
+class WELLPLATE_FORMAT_96:
+    NUMBER_OF_SKIP = 0
+    WELL_SIZE_MM = 6.21
+    WELL_SPACING_MM = 9
+    A1_X_MM = 14.3
+    A1_Y_MM = 11.36
+
+
+class WELLPLATE_FORMAT_24:
+    NUMBER_OF_SKIP = 0
+    WELL_SIZE_MM = 15.54
+    WELL_SPACING_MM = 19.3
+    A1_X_MM = 17.05
+    A1_Y_MM = 13.67
+
+
+class WELLPLATE_FORMAT_12:
+    NUMBER_OF_SKIP = 0
+    WELL_SIZE_MM = 22.05
+    WELL_SPACING_MM = 26
+    A1_X_MM = 24.75
+    A1_Y_MM = 16.86
+
+
+class WELLPLATE_FORMAT_6:
+    NUMBER_OF_SKIP = 0
+    WELL_SIZE_MM = 34.94
+    WELL_SPACING_MM = 39.2
+    A1_X_MM = 24.55
+    A1_Y_MM = 23.01
+
+
+# For simulated camera
+class SIMULATED_CAMERA:
+    ORIN_X = 20
+    ORIN_Y = 20
+    ORIN_Z = 4
+    MAGNIFICATION_FACTOR = 80
+
+
+def get_microscope_configuration_data(config_section="all", include_defaults=True, is_simulation=False, is_local=False, squid_controller=None):
+    """
+    Get microscope configuration information in JSON format.
     
+    Args:
+        config_section (str): Configuration section to retrieve ('all', 'camera', 'stage', 'illumination', 'acquisition', 'limits', 'hardware', 'wellplate', 'optics', 'autofocus')
+        include_defaults (bool): Whether to include default values from config.py
+        is_simulation (bool): Whether the microscope is in simulation mode
+        is_local (bool): Whether the microscope is in local mode
+        squid_controller (object, optional): Instance of SquidController to get dynamic data. Defaults to None.
+    
+    Returns:
+        dict: Configuration data as a dictionary
+    """
+    import time
+
+    # Get current configuration
+    config_data = {}
+
+    if config_section.lower() == "all" or config_section.lower() == "camera":
+        config_data["camera"] = {
+            "camera_type": getattr(CONFIG, 'CAMERA_TYPE', 'Default'),
+            "camera_sn": getattr(CONFIG, 'CAMERA_SN', {}),
+            "camera_sensor": getattr(CONFIG, 'CAMERA_SENSOR', 'IMX226'),
+            "camera_pixel_size_um": getattr(CONFIG, 'CAMERA_PIXEL_SIZE_UM', {}),
+            "default_pixel_format": getattr(CONFIG, 'DEFAULT_PIXEL_FORMAT', 'MONO8'),
+            "camera_reverse_x": getattr(CONFIG, 'CAMERA_REVERSE_X', False),
+            "camera_reverse_y": getattr(CONFIG, 'CAMERA_REVERSE_Y', False),
+            "rotate_image_angle": getattr(CONFIG, 'ROTATE_IMAGE_ANGLE', None),
+            "flip_image": getattr(CONFIG, 'FLIP_IMAGE', None),
+            "camera_config": {
+                "roi_offset_x_default": getattr(CONFIG.CAMERA_CONFIG, 'ROI_OFFSET_X_DEFAULT', 0),
+                "roi_offset_y_default": getattr(CONFIG.CAMERA_CONFIG, 'ROI_OFFSET_Y_DEFAULT', 0),
+                "roi_width_default": getattr(CONFIG.CAMERA_CONFIG, 'ROI_WIDTH_DEFAULT', 3104),
+                "roi_height_default": getattr(CONFIG.CAMERA_CONFIG, 'ROI_HEIGHT_DEFAULT', 2084),
+            }
+        }
+
+    if config_section.lower() == "all" or config_section.lower() == "stage":
+        config_data["stage"] = {
+            "movement_signs": {
+                "x": getattr(CONFIG, 'STAGE_MOVEMENT_SIGN_X', 1),
+                "y": getattr(CONFIG, 'STAGE_MOVEMENT_SIGN_Y', 1),
+                "z": getattr(CONFIG, 'STAGE_MOVEMENT_SIGN_Z', -1),
+                "theta": getattr(CONFIG, 'STAGE_MOVEMENT_SIGN_THETA', 1),
+            },
+            "position_signs": {
+                "x": getattr(CONFIG, 'STAGE_POS_SIGN_X', -1),
+                "y": getattr(CONFIG, 'STAGE_POS_SIGN_Y', 1),
+                "z": getattr(CONFIG, 'STAGE_POS_SIGN_Z', -1),
+                "theta": getattr(CONFIG, 'STAGE_POS_SIGN_THETA', 1),
+            },
+            "screw_pitch_mm": {
+                "x": getattr(CONFIG, 'SCREW_PITCH_X_MM', 2.54),
+                "y": getattr(CONFIG, 'SCREW_PITCH_Y_MM', 2.54),
+                "z": getattr(CONFIG, 'SCREW_PITCH_Z_MM', 0.3),
+            },
+            "microstepping": {
+                "x": getattr(CONFIG, 'MICROSTEPPING_DEFAULT_X', 256),
+                "y": getattr(CONFIG, 'MICROSTEPPING_DEFAULT_Y', 256),
+                "z": getattr(CONFIG, 'MICROSTEPPING_DEFAULT_Z', 256),
+                "theta": getattr(CONFIG, 'MICROSTEPPING_DEFAULT_THETA', 256),
+            },
+            "max_velocity_mm": {
+                "x": getattr(CONFIG, 'MAX_VELOCITY_X_MM', 30),
+                "y": getattr(CONFIG, 'MAX_VELOCITY_Y_MM', 30),
+                "z": getattr(CONFIG, 'MAX_VELOCITY_Z_MM', 2),
+            },
+            "max_acceleration_mm": {
+                "x": getattr(CONFIG, 'MAX_ACCELERATION_X_MM', 500),
+                "y": getattr(CONFIG, 'MAX_ACCELERATION_Y_MM', 500),
+                "z": getattr(CONFIG, 'MAX_ACCELERATION_Z_MM', 100),
+            },
+            "homing_enabled": {
+                "x": getattr(CONFIG, 'HOMING_ENABLED_X', False),
+                "y": getattr(CONFIG, 'HOMING_ENABLED_Y', False),
+                "z": getattr(CONFIG, 'HOMING_ENABLED_Z', False),
+            }
+        }
+
+    if config_section.lower() == "all" or config_section.lower() == "illumination":
+        config_data["illumination"] = {
+            "led_matrix_factors": {
+                "r": getattr(CONFIG, 'LED_MATRIX_R_FACTOR', 0),
+                "g": getattr(CONFIG, 'LED_MATRIX_G_FACTOR', 0),
+                "b": getattr(CONFIG, 'LED_MATRIX_B_FACTOR', 1),
+            },
+            "illumination_intensity_factor": getattr(CONFIG, 'ILLUMINATION_INTENSITY_FACTOR', 0.6),
+            "enable_strobe_output": getattr(CONFIG, 'ENABLE_STROBE_OUTPUT', False),
+            "mcu_pins": {
+                "pwm1": getattr(CONFIG.MCU_PINS, 'PWM1', 5),
+                "pwm2": getattr(CONFIG.MCU_PINS, 'PWM2', 4),
+                "pwm3": getattr(CONFIG.MCU_PINS, 'PWM3', 22),
+                "pwm4": getattr(CONFIG.MCU_PINS, 'PWM4', 3),
+                "pwm5": getattr(CONFIG.MCU_PINS, 'PWM5', 23),
+                "af_laser": getattr(CONFIG.MCU_PINS, 'AF_LASER', 15),
+            }
+        }
+
+    if config_section.lower() == "all" or config_section.lower() == "acquisition":
+        config_data["acquisition"] = {
+            "crop_width": getattr(CONFIG.Acquisition, 'CROP_WIDTH', 3000),
+            "crop_height": getattr(CONFIG.Acquisition, 'CROP_HEIGHT', 3000),
+            "image_format": getattr(CONFIG.Acquisition, 'IMAGE_FORMAT', 'bmp'),
+            "image_display_scaling_factor": getattr(CONFIG.Acquisition, 'IMAGE_DISPLAY_SCALING_FACTOR', 0.3),
+            "default_step_sizes": {
+                "dx": getattr(CONFIG.Acquisition, 'DX', 0.9),
+                "dy": getattr(CONFIG.Acquisition, 'DY', 0.9),
+                "dz": getattr(CONFIG.Acquisition, 'DZ', 1.5),
+            },
+            "default_grid_sizes": {
+                "nx": getattr(CONFIG.Acquisition, 'NX', 1),
+                "ny": getattr(CONFIG.Acquisition, 'NY', 1),
+            },
+            "default_trigger_mode": str(getattr(CONFIG, 'DEFAULT_TRIGGER_MODE', 'SOFTWARE')),
+            "default_saving_path": getattr(CONFIG, 'DEFAULT_SAVING_PATH', ''),
+            "stitching_rotation_angle_deg": getattr(CONFIG, 'STITCHING_ROTATION_ANGLE_DEG', 0.0),
+        }
+
+    if config_section.lower() == "all" or config_section.lower() == "limits":
+        config_data["limits"] = {
+            "software_pos_limit": {
+                "x_positive": getattr(CONFIG.SOFTWARE_POS_LIMIT, 'X_POSITIVE', 112.5),
+                "x_negative": getattr(CONFIG.SOFTWARE_POS_LIMIT, 'X_NEGATIVE', 10),
+                "y_positive": getattr(CONFIG.SOFTWARE_POS_LIMIT, 'Y_POSITIVE', 76),
+                "y_negative": getattr(CONFIG.SOFTWARE_POS_LIMIT, 'Y_NEGATIVE', 6),
+                "z_positive": getattr(CONFIG.SOFTWARE_POS_LIMIT, 'Z_POSITIVE', 6),
+                "z_negative": getattr(CONFIG.SOFTWARE_POS_LIMIT, 'Z_NEGATIVE', 0.05),
+            },
+            "scan_stabilization_time_ms": {
+                "x": getattr(CONFIG, 'SCAN_STABILIZATION_TIME_MS_X', 160),
+                "y": getattr(CONFIG, 'SCAN_STABILIZATION_TIME_MS_Y', 160),
+                "z": getattr(CONFIG, 'SCAN_STABILIZATION_TIME_MS_Z', 20),
+            }
+        }
+
+    if config_section.lower() == "all" or config_section.lower() == "hardware":
+        config_data["hardware"] = {
+            "controller_version": getattr(CONFIG, 'CONTROLLER_VERSION', 'Teensy'),
+            "microcontroller_def": {
+                "msg_length": getattr(CONFIG.MicrocontrollerDef, 'MSG_LENGTH', 24),
+                "cmd_length": getattr(CONFIG.MicrocontrollerDef, 'CMD_LENGTH', 8),
+                "n_bytes_pos": getattr(CONFIG.MicrocontrollerDef, 'N_BYTES_POS', 4),
+            },
+            "support_laser_autofocus": getattr(CONFIG, 'SUPPORT_LASER_AUTOFOCUS', True),
+            "enable_spinning_disk_confocal": getattr(CONFIG, 'ENABLE_SPINNING_DISK_CONFOCAL', False),
+            "inverted_objective": getattr(CONFIG, 'INVERTED_OBJECTIVE', False),
+            "retract_objective_before_moving": getattr(CONFIG, 'RETRACT_OBJECTIVE_BEFORE_MOVING_TO_LOADING_POSITION', True),
+            "objective_retracted_pos_mm": getattr(CONFIG, 'OBJECTIVE_RETRACTED_POS_MM', 0.1),
+            "use_separate_mcu_for_dac": getattr(CONFIG, 'USE_SEPARATE_MCU_FOR_DAC', False),
+        }
+
+    # Add wellplate configurations
+    if config_section.lower() == "all" or config_section.lower() == "wellplate":
+        config_data["wellplate"] = {
+            "default_format": getattr(CONFIG, 'WELLPLATE_FORMAT', 96),
+            "offset_x_mm": getattr(CONFIG, 'WELLPLATE_OFFSET_X_MM', 0),
+            "offset_y_mm": getattr(CONFIG, 'WELLPLATE_OFFSET_Y_MM', 0),
+            "formats": {
+                "96_well": {
+                    "well_size_mm": getattr(CONFIG, 'WELL_SIZE_MM', 6.21),
+                    "well_spacing_mm": getattr(CONFIG, 'WELL_SPACING_MM', 9),
+                    "a1_x_mm": getattr(CONFIG, 'A1_X_MM', 14.3),
+                    "a1_y_mm": getattr(CONFIG, 'A1_Y_MM', 11.36),
+                    "number_of_skip": getattr(CONFIG, 'NUMBER_OF_SKIP', 0),
+                },
+                "384_well": {
+                    "well_size_mm": getattr(CONFIG, 'WELL_SIZE_MM_384_WELLPLATE', 3.3),
+                    "well_spacing_mm": getattr(CONFIG, 'WELL_SPACING_MM_384_WELLPLATE', 4.5),
+                    "a1_x_mm": getattr(CONFIG, 'A1_X_MM_384_WELLPLATE', 12.05),
+                    "a1_y_mm": getattr(CONFIG, 'A1_Y_MM_384_WELLPLATE', 9.05),
+                    "number_of_skip": getattr(CONFIG, 'NUMBER_OF_SKIP_384', 1),
+                }
+            }
+        }
+
+    # Add objectives configuration
+    if config_section.lower() == "all" or config_section.lower() == "optics":
+        config_data["optics"] = {
+            "objectives": getattr(CONFIG, 'OBJECTIVES', {}),
+            "default_objective": getattr(CONFIG, 'DEFAULT_OBJECTIVE', '20x'),
+            "tube_lens_mm": getattr(CONFIG, 'TUBE_LENS_MM', 50),
+            "pixel_size_adjustment_factor": getattr(CONFIG, 'PIXEL_SIZE_ADJUSTMENT_FACTOR', 0.936),
+            "stitching_rotation_angle_deg": getattr(CONFIG, 'STITCHING_ROTATION_ANGLE_DEG', 0.0),
+        }
+        if squid_controller:
+            try:
+                squid_controller.get_pixel_size()
+                pixel_size_um = squid_controller.pixel_size_xy
+                config_data["optics"]["calculated_pixel_size_mm"] = pixel_size_um / 1000.0
+            except Exception as e:
+                config_data["optics"]["calculated_pixel_size_mm"] = f"Error: {e}"
+
+    # Add autofocus configuration
+    if config_section.lower() == "all" or config_section.lower() == "autofocus":
+        config_data["autofocus"] = {
+            "stop_threshold": getattr(CONFIG.AF, 'STOP_THRESHOLD', 0.85),
+            "crop_width": getattr(CONFIG.AF, 'CROP_WIDTH', 800),
+            "crop_height": getattr(CONFIG.AF, 'CROP_HEIGHT', 800),
+            "multipoint_reflection_af_enable": getattr(CONFIG.AF, 'MULTIPOINT_REFLECTION_AUTOFOCUS_ENABLE_BY_DEFAULT', False),
+            "multipoint_af_enable": getattr(CONFIG.AF, 'MULTIPOINT_AUTOFOCUS_ENABLE_BY_DEFAULT', False),
+            "focus_measure_operator": getattr(CONFIG, 'FOCUS_MEASURE_OPERATOR', 'LAPE'),
+            "multipoint_af_channel": getattr(CONFIG, 'MULTIPOINT_AUTOFOCUS_CHANNEL', 'BF LED matrix full'),
+            "laser_af": {
+                "main_camera_model": getattr(CONFIG, 'MAIN_CAMERA_MODEL', 'MER2-1220-32U3M'),
+                "focus_camera_model": getattr(CONFIG, 'FOCUS_CAMERA_MODEL', 'MER2-630-60U3M'),
+                "focus_camera_exposure_time_ms": getattr(CONFIG, 'FOCUS_CAMERA_EXPOSURE_TIME_MS', 0.2),
+                "focus_camera_analog_gain": getattr(CONFIG, 'FOCUS_CAMERA_ANALOG_GAIN', 0),
+                "averaging_n": getattr(CONFIG, 'LASER_AF_AVERAGING_N', 5),
+                "crop_width": getattr(CONFIG, 'LASER_AF_CROP_WIDTH', 1536),
+                "crop_height": getattr(CONFIG, 'LASER_AF_CROP_HEIGHT', 256),
+                "has_two_interfaces": getattr(CONFIG, 'HAS_TWO_INTERFACES', True),
+                "use_glass_top": getattr(CONFIG, 'USE_GLASS_TOP', True),
+            }
+        }
+
+    # Add metadata
+    config_data["metadata"] = {
+        "simulation_mode": is_simulation,
+        "local_mode": is_local,
+        "config_section_requested": config_section,
+        "include_defaults": include_defaults,
+        "timestamp": time.time(),
+        "config_file_path": getattr(CONFIG, 'CACHE_CONFIG_FILE_PATH', None),
+        "channel_configurations_path": getattr(CONFIG, 'CHANNEL_CONFIGURATIONS_PATH', os.path.join(os.path.dirname(os.path.dirname(__file__)), "config", "u2os_fucci_illumination_configurations.xml")),
+    }
+
+    return {
+        "success": True,
+        "configuration": config_data,
+        "section": config_section,
+        "total_sections": len(config_data) - 1  # Exclude metadata from count
+    }

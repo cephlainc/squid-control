@@ -1,14 +1,12 @@
-# -*- coding: utf-8 -*-
 """
 Created on Mon May  7 19:44:40 2018
 
 @author: Francois and Deepak
 """
 
-import numpy as np
 import cv2
-from scipy.ndimage.filters import laplace
-from numpy import std, square, mean
+import numpy as np
+from numpy import mean, square
 
 # color is a vector HSV whose size is 3
 

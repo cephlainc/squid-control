@@ -1,5 +1,4 @@
 cache_config_file_path.txt
-channel_configurations.xml
 last_coords.txt
 log.txt
 cache/
@@ -59,6 +58,7 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 cover/
+pytest-results.xml
 
 # Translations
 *.mo
@@ -66,6 +66,7 @@ cover/
 
 # Django stuff:
 *.log
+*.log.*
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
@@ -168,3 +169,8 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
+upload_record.json
+config_parameters.txt
+configuration_HCS_v2.ini
+
+chunk_images/

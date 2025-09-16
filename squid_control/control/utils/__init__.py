@@ -1,7 +1,8 @@
 import cv2
-from numpy import std, square, mean
 import numpy as np
+from numpy import mean, square, std
 from scipy.ndimage import label
+
 
 def crop_image(image,crop_width,crop_height):
     image_height = image.shape[0]
@@ -104,13 +105,13 @@ def overlay_mask_dpc(color_mask, im_dpc):
     # make DPC 3-channel
     im_dpc = np.stack([im_dpc]*3, axis=2)
     return (0.75*im_dpc + 0.25*color_mask).astype(np.uint8)
-    
+
 def centerCrop(image, crop_sz):
     center = image.shape
     x = int(center[1]/2 - crop_sz/2)
     y = int(center[0]/2 - crop_sz/2)
     cropped = image[y:y+crop_sz, x:x+crop_sz]
-    
+
     return cropped
 
 def interpolate_plane(triple1, triple2, triple3, point):

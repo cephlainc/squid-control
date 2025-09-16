@@ -1,0 +1,866 @@
+# Squid Microscope Control System - AI Assistant Rules
+
+## Project Overview
+This is a Python-based control system for the Squid microscope (by Cephla Inc.), featuring:
+- Real-time microscope hardware control and automation
+- Web-based API service using Hypha RPC
+- Headless operation with callback-based event handling
+- Camera integration with multiple vendors (ToupCam, FLIR, TIS)
+- Well plate scanning and image acquisition
+- WebRTC video streaming for remote microscope viewing
+- AI-powered chatbot integration for natural language microscope control
+- Simulation mode with Zarr-based virtual samples
+- Multi-channel fluorescence imaging capabilities
+- **Mirror Service**: Cloud-to-local proxy for remote microscope control
+
+## Technology Stack
+- **Core**: Python 3.8+, asyncio, OpenCV (headless)
+- **Hardware Control**: PySerial, microcontroller communication
+- **Image Processing**: NumPy, SciPy, scikit-image, OpenCV, PIL
+- **Data Storage**: Zarr, TiffFile, HDF5
+- **Web Services**: Hypha RPC, Flask, aiohttp, WebRTC (aiortc)
+- **AI Integration**: OpenAI API, similarity search services
+- **Testing**: pytest, pytest-asyncio, pytest-cov
+- **Note**: Qt dependencies have been removed for headless operation
+
+## Key Architecture Components
+
+### Core Control System (`squid_control/control/`)
+- `core.py`: Main microscope control logic
+- `microcontroller.py`: Hardware communication layer
+- `config.py`: Configuration management system
+- `squid_controller.py`: High-level microscope controller
+
+### Camera System (`squid_control/control/camera/`)
+- `camera_default.py`: Main camera interface with simulation support
+- `camera_flir.py`, `camera_toupcam.py`, `camera_TIS.py`: Vendor-specific drivers
+- Supports simulation mode with ZarrImageManager for virtual samples
+
+### Service Layer (`squid_control/start_hypha_service.py`)
+- Hypha RPC service with 30+ API endpoints
+- WebRTC video streaming capabilities
+- Task status tracking and error handling
+- AI chatbot integration for natural language control
+- `MicroscopeHyphaService` class: Main service class for microscope control
+- Video buffering system for smooth streaming
+
+### Mirror Service (`squid_control/services/mirror/`)
+- **Purpose**: Acts as a proxy between cloud and local microscope control systems, enabling remote control while maintaining WebRTC video streaming
+- **Architecture**: Dynamic method mirroring with automatic health monitoring and reconnection
+- **Components**:
+  - `MirrorMicroscopeService`: Main service class handling cloud/local connections and method mirroring
+  - `MicroscopeVideoTrack`: WebRTC video track for real-time microscope streaming
+  - `cli.py`: Command-line interface for service configuration and execution
+- **Key Features**:
+  - **Dynamic Method Mirroring**: Automatically mirrors all available methods from local services to cloud
+  - **WebRTC Video Streaming**: Real-time video with metadata transmission via data channels
+  - **Health Monitoring**: Automatic health checks with exponential backoff reconnection
+  - **Configurable Service IDs**: Customizable cloud and local service identifiers
+  - **Automatic Illumination Control**: Manages illumination based on WebRTC connection state
+
+### Video Buffering System (`squid_control/start_hypha_service.py`)
+- **Purpose**: Provides smooth, responsive WebRTC video streaming by decoupling frame acquisition from video streaming.
+- **Mechanism**:
+    - A background task (`_frame_buffer_acquisition_loop`) continuously acquires frames at a configurable FPS.
+    - Frames are stored in a thread-safe `deque` buffer.
+    - The WebRTC video stream (`get_video_frame`) pulls the latest available frame from the buffer, ensuring a consistent frame rate without waiting for slow acquisition.
+- **Activation**:
+    - Buffering is **not** started automatically on service launch.
+    - It is **lazily initialized** when `get_video_frame` is first called (i.e., when a WebRTC client connects and requests video).
+    - Can be controlled manually via `start_video_buffering()` and `stop_video_buffering()`.
+- **Automatic Shutdown**:
+    - Buffering automatically stops after a configurable idle period (`video_idle_timeout`, default 5s) if no new video frames are requested.
+    - It also stops automatically when the WebRTC client disconnects (`webrtc_connected` flag).
+- **Benefits**:
+    - **Smooth FPS Streaming**: Eliminates jerky video caused by slow frame acquisition (200-1000ms).
+    - **Responsive Controls**: Microscope controls remain responsive during video streaming.
+    - **Optimized Simulation**: In simulation mode, buffering provides a smooth video feed even with slow Zarr data access by using optimized triggers and timeouts.
+- **Test Environment**:
+    - The buffering system is automatically disabled during pytest execution to ensure test stability and avoid timeouts. Tests use direct frame acquisition instead.
+
+### Hardware Control
+- **Serial Communication with Teensy 4.1 Microcontroller**: Comprehensive control protocol
+- **Stage Positioning**: X, Y, Z axes with precise microstep control
+- **Multi-channel LED Illumination**: Full spectrum LED control and DAC management
+- **Autofocus Systems**: Reflection-based and contrast-based autofocus
+
+## Mirror Service - Comprehensive Overview
+
+### Introduction to Mirror Service
+The **Mirror Service** is a sophisticated proxy system that bridges cloud and local microscope control systems, enabling remote control of microscopes while maintaining full WebRTC video streaming capabilities. This service is essential for remote microscopy applications, allowing researchers to control microscopes from anywhere in the world.
+
+### How to Use Mirror Service
+
+#### **Method 1: Using the main module (Recommended)**
+```bash
+# Run mirror service with default settings
+python -m squid_control mirror
+
+# Run with custom service IDs
+python -m squid_control mirror \
+  --cloud-service-id "mirror-microscope-control-squid-2" \
+  --local-service-id "microscope-control-squid-2"
+
+# Run with custom server URLs
+python -m squid_control mirror \
+  --cloud-server-url "https://hypha.aicell.io" \
+  --cloud-workspace "reef-imaging" \
+  --local-server-url "http://localhost:9527" \
+  --local-service-id "microscope-control-squid-1"
+```
+
+#### **Method 2: Backward compatibility script**
+```bash
+# Use the legacy runner script
+python squid_control/run_mirror_service.py \
+  --cloud-service-id "mirror-microscope-control-squid-2" \
+  --local-service-id "microscope-control-squid-2"
+```
+
+### Mirror Service Architecture
+
+#### **1. Core Components**
+
+- **`MirrorMicroscopeService`**: Main service class that orchestrates the entire mirroring process
+- **`MicroscopeVideoTrack`**: WebRTC video track for real-time microscope video streaming
+- **`cli.py`**: Command-line interface for configuration and execution
+- **Dynamic Method Mirroring**: Automatic reflection of all local service methods to cloud
+
+#### **2. Service Configuration**
+
+**Environment Variables**:
+- `REEF_WORKSPACE_TOKEN`: Cloud service authentication token
+- `REEF_LOCAL_TOKEN`: Local service authentication token
+
+**Command-Line Arguments**:
+- `--cloud-service-id`: ID for the cloud service (default: mirror-microscope-control-squid-1)
+- `--local-service-id`: ID for the local service (default: microscope-control-squid-1)
+- `--cloud-server-url`: Cloud server URL (default: https://hypha.aicell.io)
+- `--cloud-workspace`: Cloud workspace name (default: reef-imaging)
+- `--local-server-url`: Local server URL (default: http://reef.dyn.scilifelab.se:9527)
+- `--log-file`: Log file path (default: mirror_squid_control_service.log)
+- `--verbose`: Enable verbose logging
+
+#### **3. Dynamic Method Mirroring System**
+
+The mirror service automatically discovers and mirrors all available methods from the local microscope service:
+
+```python
+def _get_mirrored_methods(self):
+    """Dynamically create mirror methods for all callable methods in local_service"""
+    mirrored_methods = {}
+    
+    # Methods to exclude from mirroring
+    excluded_methods = {
+        'name', 'id', 'config', 'type',  # Service metadata
+        '__class__', '__doc__', '__dict__', '__module__',  # Python internals
+    }
+    
+    # Get all attributes from the local service
+    for attr_name in dir(self.local_service):
+        if attr_name.startswith('_') or attr_name in excluded_methods:
+            continue
+            
+        attr = getattr(self.local_service, attr_name)
+        
+        # Check if it's callable (a method)
+        if callable(attr):
+            mirrored_methods[attr_name] = self._create_mirror_method(attr_name, attr)
+    
+    return mirrored_methods
+```
+
+**Mirror Method Creation**:
+- Each local method is wrapped in a proxy function
+- Automatic reconnection handling for lost connections
+- Comprehensive error logging and propagation
+- Transparent forwarding of all parameters and return values
+
+#### **4. WebRTC Video Streaming Integration**
+
+The mirror service provides sophisticated WebRTC video streaming capabilities:
+
+**Video Track Features**:
+- **Real-time Streaming**: Live microscope video with configurable FPS (default: 5 FPS)
+- **Metadata Transmission**: Stage position and other data via WebRTC data channels
+- **Automatic Illumination**: Turns on/off illumination based on connection state
+- **Frame Processing**: JPEG decoding, format conversion, and timing management
+- **Performance Monitoring**: Detailed timing information for debugging
+
+**WebRTC Service Management**:
+- **ICE Server Configuration**: Automatic STUN/TURN server setup
+- **Connection State Tracking**: Monitors peer connection status
+- **Data Channel Management**: Metadata transmission for stage position and other data
+- **Automatic Cleanup**: Proper resource management on disconnection
+
+#### **5. Health Monitoring & Reconnection**
+
+The service implements robust health monitoring with automatic recovery:
+
+**Health Check System**:
+- **Regular Ping Operations**: Verifies both cloud and local service health
+- **Automatic Reconnection**: Reconnects to lost services automatically
+- **Exponential Backoff**: Intelligent retry logic for failed connections
+- **Graceful Degradation**: Continues operation with available services
+
+**Reconnection Logic**:
+```python
+async def check_service_health(self):
+    """Check if the service is healthy and rerun setup if needed"""
+    while True:
+        try:
+            # Check cloud service health
+            if self.cloud_service_id and self.cloud_server:
+                service = await self.cloud_server.get_service(self.cloud_service_id)
+                ping_result = await asyncio.wait_for(service.ping(), timeout=10)
+                if ping_result != "pong":
+                    raise Exception("Cloud service not healthy")
+            
+            # Check local service health
+            if self.local_service is None:
+                success = await self.connect_to_local_service()
+                if not success:
+                    raise Exception("Failed to connect to local service")
+            
+            local_ping_result = await asyncio.wait_for(self.local_service.ping(), timeout=10)
+            if local_ping_result != "pong":
+                raise Exception("Local service not healthy")
+                
+        except Exception as e:
+            # Cleanup and retry with exponential backoff
+            await self.cleanup_cloud_service()
+            # ... retry logic with exponential backoff
+```
+
+#### **6. Error Handling & Logging**
+
+**Comprehensive Error Handling**:
+- **Connection Failures**: Automatic retry with exponential backoff
+- **Service Unavailability**: Graceful degradation and fallback
+- **Resource Cleanup**: Proper cleanup of resources on shutdown
+- **Exception Propagation**: Maintains error context for debugging
+
+**Logging System**:
+- **Rotating File Logs**: Configurable log rotation with backup retention
+- **Console Output**: Real-time logging to console
+- **Structured Format**: Timestamped, leveled logging
+- **Performance Metrics**: Detailed timing information for optimization
+
+### Mirror Service Integration Points
+
+#### **1. Local Service Connection**
+- **Hypha RPC Client**: Connects to local microscope control service
+- **Service Discovery**: Automatically discovers available methods
+- **Method Reflection**: Creates proxy methods for all local functionality
+- **Connection Management**: Handles connection lifecycle and reconnection
+
+#### **2. Cloud Service Registration**
+- **Hypha RPC Server**: Registers mirrored service in cloud workspace
+- **Public Visibility**: Makes microscope control available globally
+- **Method Exposure**: Exposes all local methods through cloud interface
+- **Service Metadata**: Provides service information and configuration
+
+#### **3. WebRTC Service Management**
+- **Video Track Creation**: Manages microscope video streaming
+- **Data Channel Setup**: Establishes metadata transmission channels
+- **Connection State Management**: Tracks WebRTC connection status
+- **Resource Cleanup**: Proper cleanup on disconnection
+
+### Mirror Service Use Cases
+
+#### **1. Remote Microscopy**
+- **Research Collaboration**: Enable remote access to microscope facilities
+- **Educational Applications**: Remote microscopy training and demonstrations
+- **Field Research**: Control microscopes from remote locations
+- **Multi-site Studies**: Coordinate experiments across different facilities
+
+#### **2. Cloud-Based Control**
+- **Web Interface**: Control microscopes through web browsers
+- **Mobile Access**: Mobile device microscope control
+- **API Integration**: Integrate microscope control into other systems
+- **Automation**: Cloud-based experiment automation
+
+#### **3. Video Streaming Applications**
+- **Live Demonstrations**: Real-time microscope demonstrations
+- **Remote Monitoring**: Monitor ongoing experiments remotely
+- **Quality Control**: Remote inspection and quality assessment
+- **Documentation**: Record experiments with live video
+
+### Mirror Service Development Guidelines
+
+#### **1. Adding New Mirroring Capabilities**
+- **Method Discovery**: Ensure new local methods are automatically mirrored
+- **Error Handling**: Add appropriate error handling for new functionality
+- **Testing**: Test both local and cloud access to new methods
+- **Documentation**: Update service documentation for new features
+
+#### **2. WebRTC Enhancements**
+- **Video Quality**: Optimize video encoding and transmission
+- **Metadata Expansion**: Add new metadata types for enhanced functionality
+- **Performance Monitoring**: Implement performance metrics for optimization
+- **Error Recovery**: Enhance error recovery for video streaming issues
+
+#### **3. Health Monitoring Improvements**
+- **Custom Health Checks**: Add application-specific health verification
+- **Performance Metrics**: Monitor service performance and resource usage
+- **Alerting**: Implement alerting for critical service issues
+- **Metrics Collection**: Collect operational metrics for analysis
+
+### Mirror Service Testing
+
+#### **1. Unit Testing**
+```bash
+# Run mirror service tests
+python -m pytest tests/ -k "mirror"
+
+# Run specific component tests
+python -m pytest tests/ -k "video_track"
+```
+
+#### **2. Integration Testing**
+- **Local Service Connection**: Test connection to local microscope services
+- **Cloud Service Registration**: Verify cloud service registration and availability
+- **WebRTC Streaming**: Test video streaming and metadata transmission
+- **Method Mirroring**: Verify all local methods are properly mirrored
+
+#### **3. Performance Testing**
+- **Connection Latency**: Measure connection establishment time
+- **Method Call Performance**: Test mirrored method call performance
+- **Video Streaming Quality**: Verify video quality and frame rate
+- **Resource Usage**: Monitor memory and CPU usage during operation
+
+## Simulation Mode - Comprehensive Overview
+
+### Introduction to Simulation Mode
+The Squid microscope control system features a comprehensive **simulation mode** that enables complete testing and development without physical hardware. This mode is essential for development, testing, and demonstration purposes, providing a realistic virtual microscope experience.
+
+### How to Use Simulation Mode
+Start the microscope in simulation mode using:
+```bash
+python -m squid_control --config HCS_v2 --simulation
+```
+
+Or through the Hypha service:
+```bash
+python -m squid_control --simulation
+```
+
+### Simulated Components
+
+#### 1. **Virtual Hardware Control**
+- **Stage Movement**: All X, Y, Z movements are simulated with realistic coordinate tracking
+- **Illumination Control**: Full LED control simulation for all channels (BF, 405nm, 488nm, 561nm, 638nm, 730nm)
+- **Autofocus Systems**: Both reflection-based and contrast-based autofocus simulation
+- **Well Plate Navigation**: Complete well plate positioning simulation for all supported formats
+
+#### 2. **Simulated Camera System (`Camera_Simulation` class)**
+The heart of the simulation is the `Camera_Simulation` class in `camera_default.py`, which provides:
+
+- **Realistic Image Acquisition**: Position-based image retrieval from virtual samples
+- **Channel-Specific Imaging**: Support for brightfield and fluorescence channels
+- **Exposure & Intensity Simulation**: Realistic exposure time and illumination intensity effects
+- **Z-Axis Blurring**: Gaussian blur simulation for out-of-focus effects
+- **Pixel Format Support**: MONO8, MONO12, MONO16 formats
+
+#### 3. **Zarr-Based Virtual Sample System**
+The simulation uses **Zarr data archives** stored in ZIP files containing high-resolution microscopy images:
+
+- **Data Source**: Virtual samples from `agent-lens/20250824-example-data-20250824-221822`
+- **Multi-Scale Support**: Uses scale1 (1/4 resolution) for performance optimization
+- **Channel Mapping**:
+  ```python
+  channel_map = {
+      0: 'BF_LED_matrix_full',          # Brightfield
+      11: 'Fluorescence_405_nm_Ex',     # 405nm fluorescence
+      12: 'Fluorescence_488_nm_Ex',     # 488nm fluorescence
+      14: 'Fluorescence_561_nm_Ex',     # 561nm fluorescence
+      13: 'Fluorescence_638_nm_Ex'      # 638nm fluorescence
+  }
+  ```
+
+### Virtual Sample Image Acquisition Workflow
+
+1. **Position Request**: User requests image at specific (x, y, z) coordinates
+2. **Coordinate Conversion**: Microscope coordinates (mm) → pixel coordinates
+3. **Zarr Data Retrieval**: `ZarrImageManager` fetches image region from Zarr archives
+4. **Image Processing**: Apply exposure, intensity, and z-blur effects
+5. **Format Conversion**: Convert to requested pixel format (MONO8/12/16)
+6. **Callback Execution**: Deliver processed image via callback system
+
+### Key Simulation Features
+
+#### **Realistic Image Effects**
+- **Exposure Simulation**: `exposure_factor = max(0.1, exposure_time / 100)`
+- **Intensity Scaling**: `intensity_factor = max(0.1, intensity / 60)`
+- **Z-Axis Blurring**: `gaussian_filter(image, sigma=abs(dz) * 6)`
+- **Fallback Images**: Example images when Zarr data unavailable
+
+#### **Performance Modes**
+- **Full Simulation**: Complete Zarr-based image retrieval
+- **Performance Mode**: Uses cached example images for faster response
+- **Fallback Mode**: Automatic fallback to example images if Zarr access fails
+
+#### **Coordinate System**
+- **Stage Coordinates**: Real-world millimeter coordinates
+- **Pixel Conversion**: `pixel_x = int((x / pixel_size_um) * 1000 / scale_factor)`
+- **Drift Correction**: Built-in correction factors for alignment
+- **Software Barriers**: Prevents movement outside safe zones
+
+### ZarrImageManager Integration
+
+The `ZarrImageManager` provides:
+- **Lazy Loading**: Resources initialized only when needed
+- **Direct Region Access**: Efficient image region retrieval
+- **Chunk Assembly**: Falls back to chunk-based assembly if needed
+- **Error Handling**: Graceful degradation with fallback images
+- **Connection Management**: Automatic connection to Hypha data services
+
+### Simulation Configuration
+
+Key configuration parameters:
+```python
+# Default simulation settings
+SIMULATED_CAMERA.ORIN_Z = reference_z_position
+MAGNIFICATION_FACTOR = 20
+pixel_size_xy = 0.333  # micrometers
+scale_factor = 4       # Using scale1 (1/4 resolution)
+SERVER_URL = "https://hypha.aicell.io"
+```
+
+### Testing Guidelines - SIMULATION FIRST
+
+⚠️ **CRITICAL TESTING PROTOCOL** ⚠️
+
+**ALWAYS test with simulated microscope first before any hardware testing**
+
+1. **Development Testing**:
+   - All new features MUST be tested in simulation mode first
+   - Verify API endpoints work correctly with simulated hardware
+   - Test service functionality with simulated responses
+   - Validate image acquisition and processing pipelines
+
+2. **Integration Testing**:
+   - Test complete workflows in simulation mode
+   - Verify well plate scanning simulations
+   - Test autofocus algorithms with simulated responses
+   - Validate WebRTC video streaming with simulated frames
+   - Test API endpoints and service integration
+
+3. **Performance Testing**:
+   - Test API response times with simulated hardware
+   - Verify memory usage patterns with Zarr data
+   - Test concurrent access to simulation resources
+
+4. **Hardware Testing - Don't Work on it now. Future Feature**:
+   - Hardware testing is a future enhancement
+   - Physical hardware integration should only be attempted after complete simulation validation
+   - Real hardware testing requires additional safety protocols and hardware setup
+
+### Simulation Limitations & Fallbacks
+
+- **Limited Sample Areas**: Not all stage positions have sample data
+- **Example Image Fallbacks**: Default images used when Zarr data unavailable
+- **Network Dependencies**: Zarr data requires connection to Hypha services
+- **Performance Considerations**: Full Zarr access may be slower than example images
+
+## Serial Communication with Teensy 4.1 Microcontroller
+
+### Overview
+The PC collaborates with a **Teensy 4.1 microcontroller** through a sophisticated serial communication protocol to control all microscope hardware components. This real-time communication enables precise control of stage positioning, illumination, and various peripherals.
+
+### Hardware Connection & Discovery
+- **Auto-Detection**: System automatically detects Teensy by manufacturer ID "Teensyduino"
+- **Baud Rate**: High-speed 2,000,000 bps for minimal latency
+- **Connection**: USB serial communication with robust error handling
+- **Platform Support**: Cross-platform (Windows, Linux, macOS) with automatic port detection
+
+### Serial Protocol Architecture
+
+#### **Command Structure (PC → Teensy)**
+```python
+# Command Buffer: 8 bytes total
+cmd = bytearray(8)
+cmd[0] = command_id        # 1 byte: Unique command identifier (0-255, circular)
+cmd[1] = command_type      # 1 byte: Operation type (see CMD_SET)
+cmd[2:7] = parameters      # 5 bytes: Command-specific parameters
+cmd[7] = crc_checksum      # 1 byte: CRC8-CCITT error detection
+```
+
+#### **Response Structure (Teensy → PC)**
+```python
+# Response Buffer: 24 bytes total
+msg[0] = command_id        # 1 byte: Echo of received command ID
+msg[1] = execution_status  # 1 byte: Success/error status
+msg[2:6] = x_position      # 4 bytes: Current X position (microsteps)
+msg[6:10] = y_position     # 4 bytes: Current Y position (microsteps)
+msg[10:14] = z_position    # 4 bytes: Current Z position (microsteps)
+msg[14:18] = reserved_axis # 4 bytes: Reserved axis (legacy theta support)
+msg[18] = button_switches  # 1 byte: Hardware button/switch states
+msg[19:23] = reserved      # 4 bytes: Reserved for future use
+msg[23] = crc_checksum     # 1 byte: Response integrity check
+```
+
+### Command Categories & Functions
+
+#### **1. Stage Movement Commands**
+- **MOVE_X/Y/Z**: Relative movement in microsteps
+- **MOVETO_X/Y/Z**: Absolute positioning to specific coordinates
+- **HOME_OR_ZERO**: Homing sequences and zero position setting
+- **SET_OFFSET_VELOCITY**: Continuous motion velocity control
+
+#### **2. Illumination Control Commands**
+- **TURN_ON/OFF_ILLUMINATION**: Binary illumination control
+- **SET_ILLUMINATION**: Intensity control for specific channels
+- **SET_ILLUMINATION_LED_MATRIX**: Full RGB LED matrix control
+- **ANALOG_WRITE_ONBOARD_DAC**: Precise analog output control
+
+#### **3. Hardware Configuration Commands**
+- **CONFIGURE_STEPPER_DRIVER**: Motor driver parameters (microstepping, current)
+- **SET_MAX_VELOCITY_ACCELERATION**: Motion profile optimization
+- **SET_LEAD_SCREW_PITCH**: Mechanical calibration parameters
+- **SET_LIM_SWITCH_POLARITY**: Safety system configuration
+
+#### **4. Advanced Control Commands**
+- **SEND_HARDWARE_TRIGGER**: Camera synchronization triggers
+- **SET_STROBE_DELAY**: Precise timing control for illumination
+- **SET_PIN_LEVEL**: Direct GPIO control for peripherals
+- **CONFIGURE_STAGE_PID**: Closed-loop position control
+
+### Communication Features
+
+#### **Reliability & Error Handling**
+- **CRC8-CCITT Checksums**: Both command and response integrity verification
+- **Command ID Tracking**: Ensures commands are executed in correct sequence
+- **Automatic Retry**: Failed commands are automatically retransmitted
+- **Timeout Detection**: Prevents system hanging on communication failures
+- **Buffer Management**: Automatic clearing of stale data in receive buffer
+
+#### **Real-Time Operation**
+- **Threaded Communication**: Dedicated thread for continuous packet reading
+- **Non-Blocking Commands**: All functions return immediately, status checked separately
+- **Status Monitoring**: Real-time position feedback and execution status
+- **Hardware Interrupts**: Immediate response to limit switches and emergency stops
+
+#### **Position Tracking System**
+- **Microstep Resolution**: Precise positioning with microstep accuracy
+- **Multi-Axis Coordination**: Simultaneous control of X, Y, Z axes
+- **Position Feedback**: Continuous real-time position reporting
+- **Software Limits**: Configurable safety boundaries to prevent hardware damage
+
+### Coordinate System & Units
+
+#### **Position Units**
+- **Microsteps**: Native microcontroller unit for motor control
+- **Millimeters**: User-friendly units converted via screw pitch calculations
+- **Conversion Formula**: `usteps = mm / (screw_pitch_mm / (microstepping × steps_per_rev))`
+
+#### **Coordinate Conventions**
+- **X/Y Axes**: Stage movement (typically horizontal plane)
+- **Z Axis**: Focus/vertical movement (positive = toward sample)
+- **Software Barriers**: JSON-defined safe movement boundaries
+
+### Software Integration
+
+#### **Python Interface Classes**
+- **`Microcontroller`**: Main hardware interface for real operations
+- **`Microcontroller_Simulation`**: Complete simulation for testing
+- **`Microcontroller2`**: Secondary controller for specialized functions
+
+#### **Configuration Management**
+- **CONFIG System**: Centralized hardware parameter management
+- **INI Files**: User-configurable microscope settings
+- **Calibration Data**: Stored screw pitches, motor parameters, safety limits
+
+#### **Threading Architecture**
+- **Command Thread**: Sends commands to microcontroller
+- **Reception Thread**: Continuously reads responses and updates status
+- **GUI Thread**: Non-blocking user interface operation
+- **Simulation Timer**: Realistic timing simulation for development
+
+### Development Guidelines
+
+#### **Command Implementation Pattern**
+```python
+def move_x_usteps(self, usteps):
+    cmd = bytearray(self.tx_buffer_length)
+    cmd[1] = CMD_SET.MOVE_X
+    payload = self._int_to_payload(usteps, 4)
+    cmd[2] = (payload >> 24) & 0xFF
+    cmd[3] = (payload >> 16) & 0xFF  
+    cmd[4] = (payload >> 8) & 0xFF
+    cmd[5] = payload & 0xFF
+    self.send_command(cmd)
+```
+
+#### **Error Handling Best Practices**
+- Always check `is_busy()` before sending new commands
+- Use `wait_till_operation_is_completed()` for synchronous operation
+- Implement proper timeout handling for critical operations
+- Log communication errors for debugging
+
+#### **Testing Protocol**
+- **Simulation First**: Always test with `Microcontroller_Simulation`
+- **Hardware Validation**: Verify commands work correctly with real Teensy
+- **Safety Checks**: Test software limits and emergency stops
+- **Performance Testing**: Validate high-speed communication reliability
+
+### Safety Systems Integration
+
+#### **Software Barriers**
+- **Edge Position Mapping**: JSON-stored boundary definitions in microsteps
+- **Concave Hull Detection**: Geometric algorithms prevent dangerous movements
+- **Real-Time Checking**: Every movement command validated against safety boundaries
+
+#### **Hardware Safety**
+- **Limit Switch Integration**: Immediate stop on hardware limit detection
+- **Emergency Stop**: Hardware-level emergency stop capability
+- **Thermal Protection**: Motor driver thermal monitoring and protection
+
+This serial communication system provides the foundation for precise, reliable, and safe microscope operation, with comprehensive simulation support for development and testing.
+
+## Coding Standards & Best Practices
+
+### Python Style
+- Follow PEP 8 with line length up to 88 characters (configured in pyproject.toml)
+- Use type hints for all new functions and methods
+- Prefer descriptive variable names (`exposure_time` over `exp`)
+- Use async/await for I/O operations and hardware communication
+
+### Error Handling
+- Always use try-except blocks around hardware operations
+- Log errors with appropriate levels (INFO, WARNING, ERROR)
+- Implement graceful degradation for hardware failures
+- Use task status tracking for long-running operations
+
+### Hardware Integration
+- Always check hardware connection before operations
+- Implement proper cleanup in finally blocks
+- Use context managers for resource management
+- Add simulation fallbacks for all hardware operations
+
+### API Design
+- Use Pydantic models for input validation (see BaseModel classes)
+- Include detailed Field descriptions for all parameters
+- Add schema validation with `@schema_function` decorator
+- If exception occurs, use raise.
+
+### Configuration Management
+- Use INI files for hardware configuration
+- Support both absolute and relative config paths
+- Implement backward compatibility for config changes
+- Validate configuration parameters on load
+- Import CONFIG from `squid_control.control.config` for accessing configuration values
+- Configuration values are loaded from `configuration_HCS_v2.ini` into structured objects (e.g., `CONFIG.Acquisition.CROP_WIDTH`)
+
+### Image Processing Standards
+- **Always crop before resize**: Follow the pattern from `squid_controller.py` for consistent image processing
+- **Center Crop Logic**: Use configuration-based crop dimensions (CONFIG.Acquisition.CROP_HEIGHT/CROP_WIDTH)
+- **Crop Implementation Pattern**:
+  ```python
+  crop_height = CONFIG.Acquisition.CROP_HEIGHT
+  crop_width = CONFIG.Acquisition.CROP_WIDTH
+  height, width = image.shape[:2]
+  start_x = width // 2 - crop_width // 2
+  start_y = height // 2 - crop_height // 2
+  # Add bounds checking
+  start_x = max(0, start_x)
+  start_y = max(0, start_y)
+  end_x = min(width, start_x + crop_width)
+  end_y = min(height, start_y + crop_height)
+  cropped_img = image[start_y:end_y, start_x:end_x]
+  ```
+- **Preserve Bit Depth**: Maintain original image bit depth through processing pipeline
+- **Bounds Checking**: Always validate crop coordinates are within image boundaries
+- **Video Buffering**: Use the video buffering system in `start_hypha_service.py` for smooth streaming
+
+## File Structure Guidelines
+
+### Main Package (`squid_control/`)
+- Keep hardware abstraction in separate modules
+- Use `__init__.py` for public API definitions
+- Store configuration files alongside code
+- Use `__main__.py` for command-line interface with subcommands (microscope, mirror)
+
+### Service Integration (`hypha_tools/`)
+- Implement service clients as separate classes
+- Use dependency injection for service connections
+- Handle service failures gracefully
+- Support both direct service and mirror service modes
+
+### Testing (`tests/`)
+- Write unit tests for all core functionality
+- Use pytest fixtures for hardware mocking
+- Test both simulation and real hardware modes
+- Include integration tests for API endpoints
+- Test mirror service integration and WebRTC functionality
+- Use `test_squid_controller.py` for comprehensive controller testing
+
+## Development Guidelines
+
+### New Feature Development
+1. Add simulation support first
+2. Implement hardware integration
+3. Add API endpoints if needed
+4. Update configuration files
+5. Write comprehensive tests
+6. Update documentation
+7. Test with both local and mirror service modes
+
+### Hardware Integration
+- Always implement simulation mode
+- Use factory patterns for hardware drivers
+- Implement proper resource cleanup
+- Add connection status monitoring
+- Test with both simulation and real hardware modes
+
+### API Development
+- Follow existing schema patterns
+- Add input validation with Pydantic
+- Implement proper error responses using `raise` instead of return JSON for failures
+- Include detailed API documentation
+- Test API endpoints through both direct service and mirror service
+
+### Event Handling & Callbacks
+
+For headless operation:
+- Use callback-based event handling 
+- Implement proper threading for long operations
+- Use the EventEmitter class for custom event handling
+- Support both local and remote operation modes via API endpoints
+
+## Main Entry Points & Command Structure
+
+### Command-Line Interface (`squid_control/__main__.py`)
+The system provides a unified command-line interface with subcommands:
+
+```bash
+# Main microscope service
+python -m squid_control microscope [--simulation] [--local] [--verbose]
+
+# Mirror service for cloud-to-local proxy
+python -m squid_control mirror [--cloud-service-id ID] [--local-service-id ID] [--verbose]
+
+# Backward compatibility
+python squid_control/run_mirror_service.py [options]
+```
+
+### Service Architecture
+- **`MicroscopeHyphaService` class**: Main service class in `start_hypha_service.py` (3998 lines)
+- **`SquidController` class**: High-level controller in `squid_controller.py` (2714 lines)
+- **`MirrorMicroscopeService`**: Mirror service for cloud proxy in `services/mirror/`
+
+## Important Conventions
+
+### Coordinate System
+- Stage coordinates in millimeters
+- Camera coordinates in pixels
+- Z-axis positive direction is toward sample
+
+### Channel Mapping
+- Channel 0: Bright Field LED matrix
+- Channels 11-15: Fluorescence (405nm, 488nm, 638nm, 561nm, 730nm)
+- Use channel_param_map for parameter mapping
+
+### Well Plate Support
+- Support 6, 12, 24, 96, 384 well plates
+- Row naming: A-H (96-well), Column numbering: 1-12
+- Use move_to_well() for navigation
+
+### Image Acquisition
+- Default exposure times per channel stored in intensity_exposure arrays
+- Support both single frame and time-lapse acquisition
+- Implement proper camera triggering modes
+
+## Zarr Canvas & Image Stitching Guidelines
+
+### Zarr Canvas Management (`squid_control/stitching/zarr_canvas.py`)
+- **Chunk Size Optimization**: Use standardized 256x256 pixel chunks for optimal I/O performance
+- **Canvas Dimension Alignment**: Always ensure canvas dimensions are divisible by chunk_size to prevent partial chunks
+- **Zero-Size Chunk Prevention**: ALWAYS validate bounds before writing to zarr arrays:
+  ```python
+  # CRITICAL: Always check for valid bounds before zarr write operations
+  if y_end > y_start and x_end > x_start:
+      zarr_array[timepoint, channel_idx, z_idx, y_start:y_end, x_start:x_end] = scaled_image[...]
+  ```
+
+### OME-Zarr Structure Standards
+- **Multi-Scale Pyramid**: Implement 4x downsampling between scales (scale0=full, scale1=1/4, scale2=1/16, etc.)
+- **Metadata Compliance**: Follow OME-Zarr 0.4 specification with proper axes definitions (T,C,Z,Y,X)
+- **Channel Mapping**: Maintain consistent channel-to-zarr-index mapping throughout the system
+- **Lazy Array Expansion**: Use `_ensure_timepoint_exists_in_zarr()` pattern for memory-efficient timepoint management
+
+### Well Canvas Implementation
+- **`WellZarrCanvas`**: Well-specific implementation with automatic coordinate conversion
+- **Well Center Calculation**: Automatic well center calculation from well plate formats
+- **Canvas Size**: Based on well diameter + configurable padding (default: 2.0mm)
+- **Fileset Naming**: Well-specific naming pattern (well_{row}{column}_{wellplate_type})
+
+### Image Writing Best Practices
+- **Bounds Validation**: Calculate and validate all coordinate bounds before any zarr write operation
+- **Image Preprocessing**: Apply rotation/cropping operations before multi-scale processing
+- **Quick Scan Mode**: For performance-critical applications, use `add_image_sync_quick()` that skips scale0
+- **Thread Safety**: Use `zarr_lock` for all zarr array access in multi-threaded environments
+
+### Chunk Management Patterns
+- **No Empty Chunks**: Never write zero-filled or empty regions that create unnecessary chunk files
+- **Chunk Deletion**: Use `_delete_timepoint_chunks()` pattern for efficient timepoint cleanup
+- **Coordinate Alignment**: Ensure image placement aligns well with chunk boundaries when possible
+- **Size Validation**: Validate image dimensions against canvas bounds before processing
+
+### Memory & Performance Optimization
+- **Lazy Loading**: Initialize zarr resources only when needed
+- **Async Processing**: Use background stitching loops for non-blocking image addition
+- **Scale-Specific Updates**: Choose appropriate scale range based on use case (all scales vs scales 1-5)
+- **Resource Cleanup**: Always implement proper cleanup in `close()` methods and context managers
+
+### Experiment Management
+- **Experiment Creation**: Use `create_experiment()` with optional well initialization
+- **Active Experiment**: Always ensure active experiment before operations using `ensure_active_experiment()`
+- **Well Canvas Lifecycle**: Use `ExperimentManager.get_well_canvas()` for automatic canvas creation/access
+- **Multi-Well Operations**: Support scanning multiple wells in single operation with `wells_to_scan` parameter
+
+### Export & Storage Guidelines
+- **Export Size Estimation**: Use `get_export_info()` to estimate zip sizes before export operations
+- **Metadata Preservation**: Include comprehensive metadata in exports (channel mapping, stage limits, etc.)
+- **File Structure Validation**: Verify zarr directory structure before export operations
+- **ZIP64 Support**: Always use `allowZip64=True` for large archives (>4GB or >65,535 files):
+  ```python
+  # CORRECT: ZIP64 support for large archives
+  with zipfile.ZipFile(zip_buffer, 'w', allowZip64=True, compression=zipfile.ZIP_STORED) as zf:
+      # Add files to archive
+  ```
+- **ZIP Path Manipulation**: When creating ZIP files with custom directory names, use direct string concatenation with forward slashes:
+  ```python
+  # CORRECT: Direct string construction for ZIP paths
+  relative_path = file_path.relative_to(zarr_path)
+  arcname = "data.zarr/" + "/".join(relative_path.parts)
+  
+  # WRONG: Path manipulation that can cause ZIP corruption
+  path_parts = relative_path.parts
+  fixed_path_parts = ("data.zarr",) + path_parts[1:]
+  arcname = str(Path(*fixed_path_parts))  # Can cause cross-platform issues
+  ```
+- **ZIP Standard Compliance**: Always use forward slashes (`/`) in ZIP archive paths, regardless of operating system
+- **Cross-Platform Safety**: Avoid `Path(*parts)` reconstruction which can create invalid paths on different OS
+
+## Debugging & Logging
+- Use the configured logger (`setup_logging()`) 
+- Log hardware operations at INFO level
+- Log errors with full stack traces
+- Include timing information for performance monitoring
+- Log zarr operations at DEBUG level to avoid log spam
+
+## Security Considerations
+- Implement user authentication for API access
+- Use authorized_emails list for permission control
+- Validate all user inputs through Pydantic models
+- Implement rate limiting for resource-intensive operations
+
+When working on this codebase:
+1. Always consider both simulation and hardware modes
+2. Maintain backward compatibility with existing configurations
+3. Add comprehensive error handling and logging
+4. Test thoroughly with both mock and real hardware
+5. Follow the established patterns for new features
+6. Update relevant documentation and tests
+7. **For Zarr operations**: Always validate bounds and prevent zero-size writes
